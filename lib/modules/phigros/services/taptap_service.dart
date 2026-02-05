@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'package:dio/dio.dart';
+
 import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 
 class ShareClient {
   final Dio _dio;
@@ -160,13 +161,13 @@ open.tapapis.cn
   ) async {
     final auth = generateMac(token);
 
-    final resp = await _dio.get(
+    final resp = await _dio.get<Map<String, dynamic>>(
       'https://open.tapapis.cn/account/basic-info/v1',
       queryParameters: {'client_id': clientId},
       options: Options(headers: {...tapHeaders, 'Authorization': auth}),
     );
 
-    return resp.data['data'];
+    return resp.data!['data'];
   }
 
   Future<String> registerUser(

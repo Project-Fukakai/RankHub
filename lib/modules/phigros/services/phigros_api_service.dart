@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 
 /// Phigros API 服务
 class PhigrosApiService {
   static final PhigrosApiService _instance = PhigrosApiService._internal();
+
   factory PhigrosApiService() => _instance;
+
   static PhigrosApiService get instance => _instance;
 
   PhigrosApiService._internal();
@@ -32,13 +35,16 @@ class PhigrosApiService {
   /// 返回用户信息，包括昵称、头像等
   Future<PhigrosUserInfo> getUserInfo(String sessionToken) async {
     try {
-      final response = await _dio.get(
+      final response = await _dio.get<Map<String, dynamic>>(
         '/users/me',
         options: Options(headers: {'X-LC-Session': sessionToken}),
       );
-
+      final responseData = response.data;
+      if (responseData == null) {
+        throw Exception("获取用户信息失败: 空返回");
+      }
       if (response.statusCode == 200) {
-        return PhigrosUserInfo.fromJson(response.data);
+        return PhigrosUserInfo.fromJson(responseData);
       } else {
         throw Exception('获取用户信息失败: ${response.statusCode}');
       }
@@ -58,14 +64,14 @@ class PhigrosApiService {
   /// 返回游戏存档数据
   Future<PhigrosGameSave?> getGameSave(String sessionToken) async {
     try {
-      final response = await _dio.get(
+      final response = await _dio.get<Map<String, dynamic>>(
         '/classes/_GameSave',
         queryParameters: {'limit': 1},
         options: Options(headers: {'X-LC-Session': sessionToken}),
       );
 
       if (response.statusCode == 200) {
-        final results = response.data['results'] as List?;
+        final results = response.data?['results'] as List?;
         if (results != null && results.isNotEmpty) {
           return PhigrosGameSave.fromJson(results[0]);
         }

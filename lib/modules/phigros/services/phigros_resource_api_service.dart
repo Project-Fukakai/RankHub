@@ -1,16 +1,18 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:rank_hub/models/phigros/song.dart';
-import 'package:rank_hub/models/phigros/collection.dart';
 import 'package:rank_hub/models/phigros/avatar.dart';
 import 'package:rank_hub/models/phigros/chart.dart';
+import 'package:rank_hub/models/phigros/collection.dart';
+import 'package:rank_hub/models/phigros/song.dart';
 
 /// Phigros 资源 API 服务
 class PhigrosResourceApiService {
   static final PhigrosResourceApiService _instance =
       PhigrosResourceApiService._internal();
+
   factory PhigrosResourceApiService() => _instance;
+
   static PhigrosResourceApiService get instance => _instance;
 
   PhigrosResourceApiService._internal();
@@ -28,10 +30,11 @@ class PhigrosResourceApiService {
   Future<Map<String, Map<String, double>>> fetchDifficulties() async {
     try {
       print('📥 开始获取定数表...');
-      final response = await _dio.get('/info/difficulty.tsv');
+      final response = await _dio.get<String>('/info/difficulty.tsv');
+      final responseData = response.data;
 
-      if (response.statusCode == 200 && response.data != null) {
-        final lines = (response.data as String).split('\n');
+      if (response.statusCode == 200 && responseData != null) {
+        final lines = responseData.split('\n');
         final difficulties = <String, Map<String, double>>{};
         int invalidLineCount = 0;
 
@@ -86,11 +89,12 @@ class PhigrosResourceApiService {
       print('📥 开始获取乐曲信息...');
 
       // 同时获取乐曲信息和定数表
-      final infoResponse = await _dio.get('/info/info.tsv');
+      final infoResponse = await _dio.get<String>('/info/info.tsv');
       final difficulties = await fetchDifficulties();
+      final infoResponseData = infoResponse.data;
 
-      if (infoResponse.statusCode == 200 && infoResponse.data != null) {
-        final lines = (infoResponse.data as String).split('\n');
+      if (infoResponse.statusCode == 200 && infoResponseData != null) {
+        final lines = infoResponseData.split('\n');
         final songs = <PhigrosSong>[];
         int missingDifficultyCount = 0;
 
@@ -170,10 +174,11 @@ class PhigrosResourceApiService {
   Future<List<PhigrosCollection>> fetchCollections() async {
     try {
       print('📥 开始获取收藏品...');
-      final response = await _dio.get('/info/collection.tsv');
+      final response = await _dio.get<String>('/info/collection.tsv');
+      final responseData = response.data;
 
-      if (response.statusCode == 200 && response.data != null) {
-        final lines = (response.data as String).split('\n');
+      if (response.statusCode == 200 && responseData != null) {
+        final lines = responseData.split('\n');
         final collections = <PhigrosCollection>[];
 
         for (final line in lines) {
@@ -200,10 +205,11 @@ class PhigrosResourceApiService {
   Future<List<PhigrosAvatar>> fetchAvatars() async {
     try {
       print('📥 开始获取头像列表...');
-      final response = await _dio.get('/info/avatar.txt');
+      final response = await _dio.get<String>('/info/avatar.txt');
+      final responseData = response.data;
 
-      if (response.statusCode == 200 && response.data != null) {
-        final lines = (response.data as String).split('\n');
+      if (response.statusCode == 200 && responseData != null) {
+        final lines = responseData.split('\n');
         final avatars = <PhigrosAvatar>[];
 
         for (final line in lines) {
@@ -233,11 +239,12 @@ class PhigrosResourceApiService {
       print('📥 开始获取谱面: $songId - $difficulty');
       print('   URL: $url');
 
-      final response = await _dio.get(url);
+      final response = await _dio.get<String>(url);
+      final responseData = response.data;
 
-      if (response.statusCode == 200 && response.data != null) {
+      if (response.statusCode == 200 && responseData != null) {
         final chart = PhigrosChart.fromJson(
-          jsonDecode(response.data) as Map<String, dynamic>,
+          jsonDecode(responseData) as Map<String, dynamic>,
         );
         print('✅ 获取谱面完成: ${chart.totalNotes} 个音符');
         return chart;
