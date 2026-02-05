@@ -2,6 +2,7 @@ import 'package:amap_map/amap_map.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_fullscreen/flutter_fullscreen.dart';
 import 'package:get/get.dart';
+import 'package:phasetida_flutter/phasetida_flutter.dart';
 import 'package:rank_hub/routes/app_pages.dart';
 import 'package:rank_hub/routes/app_routes.dart';
 import 'package:rank_hub/controllers/theme_controller.dart';
@@ -38,6 +39,9 @@ void main() async {
 
   // 初始化排队状态管理器
   Get.put(QueueStatusManager());
+
+  // 初始化phasetida
+  await PhasetidaFlutter.init();
 
   await FullScreen.ensureInitialized();
 

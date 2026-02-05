@@ -67,10 +67,11 @@ dependencies:
   phasetida_flutter:
     git:
       url: https://github.com/phasetida/phasetida_flutter.git
-      ref: 0.1.7
+      ref: 0.2.0
   flutter_fullscreen: ^1.2.0
   simai_flutter:
-    path: '../../simai_flutter'
+    git:
+      url: https://github.com/Project-Fukakai/simai_flutter.git
   fast_gbk: ^1.0.0
   brotli: ^0.6.0
   slide_countdown: ^2.0.2

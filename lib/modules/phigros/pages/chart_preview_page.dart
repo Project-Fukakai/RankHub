@@ -1,7 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_fullscreen/flutter_fullscreen.dart';
-import 'package:phasetida_flutter/shell.dart';
+import 'package:phasetida_flutter/phasetida_flutter.dart';
 import 'package:rank_hub/models/phigros/chart.dart';
 import 'package:rank_hub/models/phigros/song.dart';
 
@@ -46,10 +46,9 @@ class _PhigrosChartPreviewPageState extends State<PhigrosChartPreviewPage> {
   Widget build(BuildContext context) {
     return PhigrosChartPlayerShellWidget(
       jsonData: json,
-      port: 11451,
       songName: widget.song.name,
       author: widget.song.composer,
-      chartComposer:widget.chartComposer,
+      chartComposer: widget.chartComposer,
       quitCallback: () {
         Navigator.pop(context);
       },
