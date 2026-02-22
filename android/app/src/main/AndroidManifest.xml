@@ -89,5 +89,9 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="bilibili"/>
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="taptap"/>
+        </intent>
     </queries>
 </manifest>
