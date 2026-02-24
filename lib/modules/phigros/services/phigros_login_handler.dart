@@ -246,9 +246,7 @@ class _QRCodeLoginTabState extends State<_QRCodeLoginTab> {
 
     try {
       final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
