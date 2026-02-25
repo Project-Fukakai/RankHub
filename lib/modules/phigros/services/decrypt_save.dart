@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'dart:convert';
 
-import 'package:rank_hub/modules/phigros/services/ase_decrypt.dart';
+import 'package:rank_hub/modules/phigros/services/aes_decrypt.dart';
 import 'package:rank_hub/modules/phigros/services/byte_reader.dart';
 import 'package:rank_hub/modules/phigros/services/save_file_reader.dart';
 
