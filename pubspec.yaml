@@ -67,7 +67,7 @@ dependencies:
   phasetida_flutter:
     git:
       url: https://github.com/phasetida/phasetida_flutter.git
-      ref: 0.3.0
+      ref: 0.3.1
   flutter_fullscreen: ^1.2.0
   simai_flutter: ^0.2.3
   fast_gbk: ^1.0.0
