@@ -1301,11 +1301,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "0.3.0"
-      resolved-ref: "8450f348c47ce7f0370740ad3a4515a88add2563"
+      ref: "0.3.1"
+      resolved-ref: a8796799208ff6ec5882d6c0c17ba0687b2dac4f
       url: "https://github.com/phasetida/phasetida_flutter.git"
     source: git
-    version: "0.3.0"
+    version: "0.3.1"
   photo_view:
     dependency: "direct main"
     description:
