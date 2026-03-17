@@ -63,13 +63,15 @@ dependencies:
   marquee: ^2.3.0
   split_button_m3e: ^0.2.1
   file_picker: ^10.3.8
+  based_split_view: ^1.2.3
 
   phasetida_flutter:
     git:
       url: https://github.com/phasetida/phasetida_flutter.git
       ref: 0.2.0
   flutter_fullscreen: ^1.2.0
-  simai_flutter: ^0.2.3
+  simai_flutter:
+    path: ../../simai_flutter
   fast_gbk: ^1.0.0
   brotli: ^0.6.0
   slide_countdown: ^2.0.2

@@ -1,9 +1,6 @@
 import 'package:rank_hub/models/platform.dart';
 import 'package:rank_hub/models/account/account.dart' show Platform;
-import 'package:rank_hub/modules/lxns/lxns_platform.dart';
 import 'package:rank_hub/modules/musedash/musedash_platform.dart';
-import 'package:rank_hub/modules/phigros/phigros_platform.dart';
-import 'package:rank_hub/modules/divingfish/divingfish_platform.dart';
 import 'package:rank_hub/modules/osu/osu_platform.dart';
 
 /// 平台注册中心
@@ -16,10 +13,7 @@ class PlatformRegistry {
 
   // 所有注册的平台
   final List<IPlatform> _platforms = [
-    LxnsPlatform(),
-    DivingFishPlatform(),
     MuseDashPlatform(),
-    PhigrosPlatform(),
     OsuPlatform(),
     // 未来可以添加更多平台
     // OtherPlatform(),

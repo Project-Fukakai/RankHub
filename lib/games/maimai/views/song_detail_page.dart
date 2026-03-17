@@ -426,7 +426,6 @@ class _SongDetailPageState extends ConsumerState<SongDetailPage>
                 difficulty: song.difficulties.standard[i],
                 songId: song.songId,
                 songName: song.title,
-                version: song.versionTitle,
               ),
           ],
           // DX 谱面
@@ -436,7 +435,6 @@ class _SongDetailPageState extends ConsumerState<SongDetailPage>
                 difficulty: song.difficulties.dx[i],
                 songId: song.songId,
                 songName: song.title,
-                version: song.versionTitle,
               ),
           ],
           // 宴会场谱面
@@ -446,7 +444,6 @@ class _SongDetailPageState extends ConsumerState<SongDetailPage>
                 difficulty: song.difficulties.utage[i],
                 songId: song.songId,
                 songName: song.title,
-                version: song.versionTitle,
                 isUtage: true,
               ),
           ],

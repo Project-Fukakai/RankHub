@@ -6,7 +6,6 @@ import 'package:rank_hub/pages/all_shops_page.dart';
 import 'package:rank_hub/pages/wiki.dart';
 import 'package:rank_hub/pages/rank.dart';
 import 'package:rank_hub/pages/mine.dart';
-import 'package:rank_hub/pages/library/library_page.dart';
 import 'package:rank_hub/pages/detail.dart';
 import 'package:rank_hub/pages/settings.dart';
 import 'package:rank_hub/pages/theme_settings.dart';
@@ -33,7 +32,6 @@ class AppPages {
     GetPage(name: AppRoutes.wiki, page: () => const WikiPage()),
     GetPage(name: AppRoutes.rank, page: () => const RankPage()),
     GetPage(name: AppRoutes.mine, page: () => const MinePage()),
-    GetPage(name: AppRoutes.library, page: () => const LibraryPage()),
     GetPage(
       name: AppRoutes.detail,
       page: () => const DetailPage(),

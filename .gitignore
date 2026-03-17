@@ -50,3 +50,5 @@ app.*.map.json
 .trae/
 dev_resources/
 schemas
+ios/build/ios/XCBuildData/
+android/build/reports/

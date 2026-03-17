@@ -23,9 +23,40 @@ abstract class PlatformLoginHandler {
   /// 是否支持该平台
   bool get isSupported => true;
 
+  /// 构建登录页面 Widget
+  Widget buildLoginPage(BuildContext context);
+
   /// 显示登录页面
   /// 返回登录结果,包含账号信息和凭据数据
-  Future<PlatformLoginResult?> showLoginPage(BuildContext context);
+  Future<PlatformLoginResult?> showLoginPage(BuildContext context) async {
+    final isWide = MediaQuery.of(context).size.width > 640;
+    if (isWide) {
+      return await showModalBottomSheet<PlatformLoginResult>(
+        context: context,
+        isScrollControlled: true,
+        useRootNavigator: true,
+        constraints: const BoxConstraints(maxWidth: 640),
+        builder:
+            (context) => ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.85,
+                child: buildLoginPage(context),
+              ),
+            ),
+      );
+    }
+
+    return await Navigator.push<PlatformLoginResult>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => buildLoginPage(context),
+        fullscreenDialog: true,
+      ),
+    );
+  }
 
   /// 验证凭据是否有效
   /// 用于在绑定前验证用户输入的凭据

@@ -28,13 +28,8 @@ class MuseDashLoginHandler extends PlatformLoginHandler {
   bool get isSupported => true;
 
   @override
-  Future<PlatformLoginResult?> showLoginPage(BuildContext context) async {
-    return await Navigator.of(context).push<PlatformLoginResult>(
-      MaterialPageRoute(
-        builder: (context) => const MuseDashBindPage(),
-        fullscreenDialog: true,
-      ),
-    );
+  Widget buildLoginPage(BuildContext context) {
+    return const MuseDashBindPage();
   }
 
   @override

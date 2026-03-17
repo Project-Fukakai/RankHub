@@ -17,17 +17,17 @@ class MainPage extends GetView<MainController> {
   Widget build(BuildContext context) {
     final themeController = Get.find<ThemeController>();
 
-    return Obx(() {
-      final isCommunity = controller.currentIndex.value == 0;
-      final effectiveTheme = isCommunity
-          ? themeController.getDarkTheme()
-          : Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWideScreen = constraints.maxWidth > 640;
 
-      return Theme(
-        data: effectiveTheme,
-        child: Scaffold(
-          extendBody: true,
-          body: AnimatedSwitcher(
+        return Obx(() {
+          final isCommunity = controller.currentIndex.value == 0;
+          final effectiveTheme = isCommunity
+              ? themeController.getDarkTheme()
+              : Theme.of(context);
+
+          final body = AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
             switchInCurve: Curves.easeInOut,
             switchOutCurve: Curves.easeInOut,
@@ -54,51 +54,102 @@ class MainPage extends GetView<MainController> {
                 MinePage(),
               ],
             ),
-          ),
-          bottomNavigationBar: ClipRRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: NavigationBar(
-                selectedIndex: controller.currentIndex.value,
-                onDestinationSelected: (index) {
-                  HapticFeedback.lightImpact();
-                  controller.changeTabIndex(index);
-                },
-                backgroundColor: effectiveTheme.colorScheme.surface.withValues(
-                  alpha: 0.8,
-                ),
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.people_outline),
-                    selectedIcon: Icon(Icons.people),
-                    label: '社区',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.book_outlined),
-                    selectedIcon: Icon(Icons.book),
-                    label: '资料库',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.query_stats_outlined),
-                    selectedIcon: Icon(Icons.query_stats),
-                    label: '成绩',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.construction_outlined),
-                    selectedIcon: Icon(Icons.construction),
-                    label: '工具箱',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.person_outline),
-                    selectedIcon: Icon(Icons.person),
-                    label: '我的',
-                  ),
-                ],
-              ),
+          );
+
+          return Theme(
+            data: effectiveTheme,
+            child: Scaffold(
+              extendBody: !isWideScreen,
+              body: isWideScreen
+                  ? Row(
+                      children: [
+                        NavigationRail(
+                          selectedIndex: controller.currentIndex.value,
+                          onDestinationSelected: (index) {
+                            HapticFeedback.lightImpact();
+                            controller.changeTabIndex(index);
+                          },
+                          labelType: NavigationRailLabelType.all,
+                          destinations: const [
+                            NavigationRailDestination(
+                              icon: Icon(Icons.people_outline),
+                              selectedIcon: Icon(Icons.people),
+                              label: Text('社区'),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.book_outlined),
+                              selectedIcon: Icon(Icons.book),
+                              label: Text('资料库'),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.query_stats_outlined),
+                              selectedIcon: Icon(Icons.query_stats),
+                              label: Text('成绩'),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.construction_outlined),
+                              selectedIcon: Icon(Icons.construction),
+                              label: Text('工具箱'),
+                            ),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.person_outline),
+                              selectedIcon: Icon(Icons.person),
+                              label: Text('我的'),
+                            ),
+                          ],
+                        ),
+                        const VerticalDivider(thickness: 1, width: 1),
+                        Expanded(child: body),
+                      ],
+                    )
+                  : body,
+              bottomNavigationBar: isWideScreen
+                  ? null
+                  : ClipRRect(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: NavigationBar(
+                          selectedIndex: controller.currentIndex.value,
+                          onDestinationSelected: (index) {
+                            HapticFeedback.lightImpact();
+                            controller.changeTabIndex(index);
+                          },
+                          backgroundColor: effectiveTheme.colorScheme.surface
+                              .withValues(alpha: 0.8),
+                          destinations: const [
+                            NavigationDestination(
+                              icon: Icon(Icons.people_outline),
+                              selectedIcon: Icon(Icons.people),
+                              label: '社区',
+                            ),
+                            NavigationDestination(
+                              icon: Icon(Icons.book_outlined),
+                              selectedIcon: Icon(Icons.book),
+                              label: '资料库',
+                            ),
+                            NavigationDestination(
+                              icon: Icon(Icons.query_stats_outlined),
+                              selectedIcon: Icon(Icons.query_stats),
+                              label: '成绩',
+                            ),
+                            NavigationDestination(
+                              icon: Icon(Icons.construction_outlined),
+                              selectedIcon: Icon(Icons.construction),
+                              label: '工具箱',
+                            ),
+                            NavigationDestination(
+                              icon: Icon(Icons.person_outline),
+                              selectedIcon: Icon(Icons.person),
+                              label: '我的',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
             ),
-          ),
-        ),
-      );
-    });
+          );
+        });
+      },
+    );
   }
 }

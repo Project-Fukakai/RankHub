@@ -17,13 +17,18 @@ const PhigrosAvatarSchema = CollectionSchema(
   name: r'PhigrosAvatar',
   id: -6842372810731563928,
   properties: {
-    r'avatarName': PropertySchema(
+    r'addressableKey': PropertySchema(
       id: 0,
+      name: r'addressableKey',
+      type: IsarType.string,
+    ),
+    r'avatarName': PropertySchema(
+      id: 1,
       name: r'avatarName',
       type: IsarType.string,
     ),
     r'avatarUrl': PropertySchema(
-      id: 1,
+      id: 2,
       name: r'avatarUrl',
       type: IsarType.string,
     ),
@@ -64,6 +69,12 @@ int _phigrosAvatarEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
+  {
+    final value = object.addressableKey;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.avatarName.length * 3;
   bytesCount += 3 + object.avatarUrl.length * 3;
   return bytesCount;
@@ -75,8 +86,9 @@ void _phigrosAvatarSerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.avatarName);
-  writer.writeString(offsets[1], object.avatarUrl);
+  writer.writeString(offsets[0], object.addressableKey);
+  writer.writeString(offsets[1], object.avatarName);
+  writer.writeString(offsets[2], object.avatarUrl);
 }
 
 PhigrosAvatar _phigrosAvatarDeserialize(
@@ -86,7 +98,8 @@ PhigrosAvatar _phigrosAvatarDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = PhigrosAvatar();
-  object.avatarName = reader.readString(offsets[0]);
+  object.addressableKey = reader.readStringOrNull(offsets[0]);
+  object.avatarName = reader.readString(offsets[1]);
   object.id = id;
   return object;
 }
@@ -99,8 +112,10 @@ P _phigrosAvatarDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 1:
+      return (reader.readString(offset)) as P;
+    case 2:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -320,6 +335,165 @@ extension PhigrosAvatarQueryWhere
 
 extension PhigrosAvatarQueryFilter
     on QueryBuilder<PhigrosAvatar, PhigrosAvatar, QFilterCondition> {
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'addressableKey'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'addressableKey'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyEqualTo(String? value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'addressableKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'addressableKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'addressableKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'addressableKey',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'addressableKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'addressableKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'addressableKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'addressableKey',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'addressableKey', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
+  addressableKeyIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'addressableKey', value: ''),
+      );
+    });
+  }
+
   QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterFilterCondition>
   avatarNameEqualTo(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -668,6 +842,20 @@ extension PhigrosAvatarQueryLinks
 
 extension PhigrosAvatarQuerySortBy
     on QueryBuilder<PhigrosAvatar, PhigrosAvatar, QSortBy> {
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterSortBy>
+  sortByAddressableKey() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addressableKey', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterSortBy>
+  sortByAddressableKeyDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addressableKey', Sort.desc);
+    });
+  }
+
   QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterSortBy> sortByAvatarName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'avatarName', Sort.asc);
@@ -697,6 +885,20 @@ extension PhigrosAvatarQuerySortBy
 
 extension PhigrosAvatarQuerySortThenBy
     on QueryBuilder<PhigrosAvatar, PhigrosAvatar, QSortThenBy> {
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterSortBy>
+  thenByAddressableKey() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addressableKey', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterSortBy>
+  thenByAddressableKeyDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addressableKey', Sort.desc);
+    });
+  }
+
   QueryBuilder<PhigrosAvatar, PhigrosAvatar, QAfterSortBy> thenByAvatarName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'avatarName', Sort.asc);
@@ -738,6 +940,16 @@ extension PhigrosAvatarQuerySortThenBy
 
 extension PhigrosAvatarQueryWhereDistinct
     on QueryBuilder<PhigrosAvatar, PhigrosAvatar, QDistinct> {
+  QueryBuilder<PhigrosAvatar, PhigrosAvatar, QDistinct>
+  distinctByAddressableKey({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(
+        r'addressableKey',
+        caseSensitive: caseSensitive,
+      );
+    });
+  }
+
   QueryBuilder<PhigrosAvatar, PhigrosAvatar, QDistinct> distinctByAvatarName({
     bool caseSensitive = true,
   }) {
@@ -760,6 +972,13 @@ extension PhigrosAvatarQueryProperty
   QueryBuilder<PhigrosAvatar, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<PhigrosAvatar, String?, QQueryOperations>
+  addressableKeyProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'addressableKey');
     });
   }
 

@@ -55,7 +55,7 @@ class DxRatingTable extends StatelessWidget {
         columnSpacing: 16,
         horizontalMargin: 0,
         headingRowColor: WidgetStateProperty.all(
-          colorScheme.surfaceContainerHighest.withOpacity(0.3),
+          colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         ),
         columns: const [
           DataColumn(
@@ -105,8 +105,8 @@ class DxRatingTable extends StatelessWidget {
           return DataRow(
             color: isCurrentStage
                 ? WidgetStateProperty.all(
-                    colorScheme.primaryContainer.withOpacity(0.3),
-                  )
+                  colorScheme.primaryContainer.withValues(alpha: 0.3),
+                )
                 : null,
             cells: [
               DataCell(

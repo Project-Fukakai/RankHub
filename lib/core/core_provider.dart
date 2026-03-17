@@ -5,14 +5,14 @@ import 'package:rank_hub/core/credential_provider.dart';
 import 'package:rank_hub/core/game.dart';
 import 'package:rank_hub/core/game_registry_provider.dart';
 import 'package:rank_hub/core/login_provider.dart';
-import 'package:rank_hub/core/platform.dart';
-import 'package:rank_hub/core/platform_adapter_provider.dart';
-import 'package:rank_hub/core/platform_game_registry.dart';
 import 'package:rank_hub/core/platform_id.dart';
-import 'package:rank_hub/core/platform_registry_provider.dart';
 import 'package:rank_hub/core/resource_loader.dart';
 import 'package:rank_hub/core/resource_registry_provider.dart';
+import 'package:rank_hub/core/services/core_log_service.dart';
 import 'package:rank_hub/core/services/storage_service.dart';
+import 'package:rank_hub/platforms/platform_descriptor.dart';
+import 'package:rank_hub/platforms/platform_registry.dart';
+import 'package:rank_hub/services/isar_service.dart';
 
 class CoreProvider {
   // 单例模式
@@ -29,76 +29,37 @@ class CoreProvider {
   // ==================== 注册表 ====================
 
   /// 平台注册表
-  final PlatformRegistryProvider platformRegistry = PlatformRegistryProvider();
+  final PlatformRegistry platformRegistry = PlatformRegistry();
 
   /// 游戏注册表
   final GameRegistryProvider gameRegistry = GameRegistryProvider();
 
-  /// 平台-游戏关联注册表
-  final PlatformGameRegistry platformGameRegistry = PlatformGameRegistry();
-
   /// 资源注册表
   final ResourceRegistryProvider resourceRegistry = ResourceRegistryProvider();
 
-  /// 平台适配器注册表
-  final PlatformAdapterRegistry adapterRegistry = PlatformAdapterRegistry();
-
-  // ==================== 服务 ====================
-
   /// 存储服务
   final CoreStorageService coreStorage = CoreStorageService.instance;
-
-  // ==================== 凭据和登录提供者映射 ====================
-
-  final Map<String, CredentialProvider> _credentialProviders = {};
-  final Map<String, PlatformLoginHandler> _loginHandlers = {};
-
-  // ==================== 注册方法 ====================
-
-  /// 注册凭据提供者
-  void registerCredentialProvider(CredentialProvider provider) {
-    _credentialProviders[provider.platformId.value] = provider;
-  }
-
-  /// 注册登录处理器
-  void registerLoginHandler(PlatformLoginHandler handler) {
-    _loginHandlers[handler.platformId.value] = handler;
-  }
-
-  /// 批量注册凭据提供者
-  void registerCredentialProviders(List<CredentialProvider> providers) {
-    for (final provider in providers) {
-      registerCredentialProvider(provider);
-    }
-  }
-
-  /// 批量注册登录处理器
-  void registerLoginHandlers(List<PlatformLoginHandler> handlers) {
-    for (final handler in handlers) {
-      registerLoginHandler(handler);
-    }
-  }
 
   // ==================== 获取方法 ====================
 
   /// 获取凭据提供者
   CredentialProvider? getCredentialProvider(String platformId) {
-    return _credentialProviders[platformId];
+    return platformRegistry.getCredentialProvider(PlatformId(platformId));
   }
 
   /// 获取登录处理器
   PlatformLoginHandler? getLoginHandler(String platformId) {
-    return _loginHandlers[platformId];
+    return platformRegistry.getLoginHandler(PlatformId(platformId));
   }
 
   /// 获取所有凭据提供者
   List<CredentialProvider> getAllCredentialProviders() {
-    return _credentialProviders.values.toList();
+    return platformRegistry.getAllCredentialProviders();
   }
 
   /// 获取所有登录处理器
   List<PlatformLoginHandler> getAllLoginHandlers() {
-    return _loginHandlers.values.toList();
+    return platformRegistry.getAllLoginHandlers();
   }
 
   // ==================== 平台-游戏关联便捷方法 ====================
@@ -107,25 +68,22 @@ class CoreProvider {
   ///
   /// [platformId] 平台ID字符串
   List<Game> getGamesByPlatform(String platformId) {
-    final gameIdStrings = platformGameRegistry.getGamesForPlatform(
+    final gameIds = platformRegistry.getGamesForPlatform(
       PlatformId(platformId),
     );
-    return gameRegistry.getGamesByIdStrings(gameIdStrings);
+    return gameRegistry.getGamesByIdStrings(
+      gameIds.map((id) => id.value).toList(),
+    );
   }
 
   /// 获取支持某个游戏的所有平台
   ///
   /// [gameIdString] 游戏ID字符串
-  List<Platform> getPlatformsForGame(String gameIdString) {
+  List<PlatformDescriptor> getPlatformsForGame(String gameIdString) {
     // 先找到游戏对象以获取完整的 GameId
     final game = gameRegistry.findByIdString(gameIdString);
     if (game == null) return [];
-
-    final platformIdStrings = platformGameRegistry.getPlatformsForGame(game.id);
-    return platformIdStrings
-        .map((id) => platformRegistry.findByIdString(id))
-        .whereType<Platform>()
-        .toList();
+    return platformRegistry.getPlatformsForGame(game.id);
   }
 
   /// 检查平台是否支持某个游戏
@@ -135,8 +93,7 @@ class CoreProvider {
   bool isPlatformSupportGame(String platformId, String gameIdString) {
     final game = gameRegistry.findByIdString(gameIdString);
     if (game == null) return false;
-
-    return platformGameRegistry.isPlatformSupportGame(
+    return platformRegistry.isPlatformSupportGame(
       PlatformId(platformId),
       game.id,
     );
@@ -154,17 +111,46 @@ class CoreProvider {
   Future<void> dispose() async {
     platformRegistry.clear();
     gameRegistry.clear();
-    platformGameRegistry.clear();
     resourceRegistry.clear();
-    adapterRegistry.clear();
-    _credentialProviders.clear();
-    _loginHandlers.clear();
 
     // 关闭存储服务
     await coreStorage.close();
   }
 
   // ==================== 上下文管理副作用方法 ====================
+
+  /// 在应用启动时初始化 AppContext
+  /// 优先使用上次选择的游戏和账号，保证资源加载有上下文
+  Future<void> initializeAppContext(AppContextNotifier notifier) async {
+    try {
+      final games = gameRegistry.getAllGames();
+      if (games.isEmpty) return;
+
+      final lastGameId = await coreStorage.getLastSelectedGameId();
+      final selectedGame =
+          lastGameId != null
+              ? gameRegistry.findByIdString(lastGameId)
+              : null;
+      final game = selectedGame ?? games.first;
+
+      Account? account = await coreStorage.getSelectedAccount(game.id.value);
+      final isCompatible = account != null &&
+          await _checkAccountGameCompatibility(account, game);
+      if (!isCompatible) {
+        account = await _findCompatibleAccountForGame(game);
+        if (account != null) {
+          await coreStorage.setSelectedAccountForGame(
+            game.id.value,
+            account.platformId,
+            _getAccountIdentifier(account),
+          );
+        }
+      }
+      await _buildContext(game, account, notifier);
+    } catch (e) {
+      CoreLogService.w('初始化 AppContext 失败: $e');
+    }
+  }
 
   /// 设置当前游戏
   /// 会自动保存选择并更新上下文
@@ -174,17 +160,25 @@ class CoreProvider {
       await coreStorage.setLastSelectedGameId(game.id.value);
 
       // 加载该游戏对应的账号
-      final account = await coreStorage.getSelectedAccount(game.id.value);
+      Account? account = await coreStorage.getSelectedAccount(game.id.value);
+      final isCompatible = account != null &&
+          await _checkAccountGameCompatibility(account, game);
+      if (!isCompatible) {
+        account = await _findCompatibleAccountForGame(game);
+        if (account != null) {
+          await coreStorage.setSelectedAccountForGame(
+            game.id.value,
+            account.platformId,
+            _getAccountIdentifier(account),
+          );
+        }
+      }
 
       // 重建 AppContext
-      if (account != null) {
-        await _buildAppContext(game, account, ref);
-      } else {
-        // 游客模式
-        ref.read(appContextProvider.notifier).clear();
-      }
+      final notifier = ref.read(appContextProvider.notifier);
+      await _buildContext(game, account, notifier);
     } catch (e) {
-      print('⚠️ 设置当前游戏失败: $e');
+      CoreLogService.w('设置当前游戏失败: $e');
       rethrow;
     }
   }
@@ -219,10 +213,11 @@ class CoreProvider {
         );
 
         // 重建 AppContext（账号切换）
-        await _buildAppContext(currentGame, account, ref);
+        final notifier = ref.read(appContextProvider.notifier);
+        await _buildContext(currentGame, account, notifier);
       }
     } catch (e) {
-      print('⚠️ 设置当前账号失败: $e');
+      CoreLogService.w('设置当前账号失败: $e');
       rethrow;
     }
   }
@@ -233,9 +228,10 @@ class CoreProvider {
     Game game,
   ) async {
     // 获取支持该游戏的所有平台
-    final supportedPlatforms = platformGameRegistry.getPlatformsForGame(
-      game.id,
-    );
+    final supportedPlatforms = platformRegistry
+        .getPlatformsForGame(game.id)
+        .map((platform) => platform.id.value)
+        .toList();
 
     // 检查账号的平台是否在支持列表中
     final isCompatible = supportedPlatforms.any(
@@ -243,8 +239,10 @@ class CoreProvider {
     );
 
     if (!isCompatible) {
-      print('账号平台 ${account.platformId} 不支持游戏 ${game.id.value}');
-      print('   支持的平台: ${supportedPlatforms.join(", ")}');
+      CoreLogService.w(
+        '账号平台 ${account.platformId} 不支持游戏 ${game.id.value} '
+        '(支持的平台: ${supportedPlatforms.join(", ")})',
+      );
     }
 
     return isCompatible;
@@ -287,12 +285,13 @@ class CoreProvider {
         );
 
         // 重建 AppContext
-        await _buildAppContext(targetGame, account, ref);
+        final notifier = ref.read(appContextProvider.notifier);
+        await _buildContext(targetGame, account, notifier);
       } else {
-        print('⚠️ 没有找到与账号兼容的游戏');
+        CoreLogService.w('没有找到与账号兼容的游戏');
       }
     } catch (e) {
-      print('⚠️ 切换兼容游戏失败: $e');
+      CoreLogService.w('切换兼容游戏失败: $e');
       rethrow;
     }
   }
@@ -310,6 +309,21 @@ class CoreProvider {
     return allGames.isNotEmpty ? allGames.first : null;
   }
 
+  /// 为指定游戏查找可用账号
+  Future<Account?> _findCompatibleAccountForGame(Game game) async {
+    final supportedPlatforms = platformRegistry
+        .getPlatformsForGame(game.id)
+        .map((platform) => platform.id.value)
+        .toList();
+
+    for (final platformId in supportedPlatforms) {
+      final accounts = await coreStorage.getAccountsByPlatform(platformId);
+      if (accounts.isNotEmpty) return accounts.first;
+    }
+
+    return null;
+  }
+
   /// 获取账号最后使用的游戏ID
   Future<String?> _getLastGameForAccount(
     String platformId,
@@ -322,28 +336,38 @@ class CoreProvider {
   }
 
   /// 构建应用上下文（完全重建 Scope + Loader）
-  Future<void> _buildAppContext(Game game, Account account, Ref ref) async {
+  Future<void> _buildContext(
+    Game game,
+    Account? account,
+    AppContextNotifier notifier,
+  ) async {
     try {
-      final adapters = adapterRegistry.getAllAdapters();
+      await _warmupIsarForGame(game);
+      final adapters = platformRegistry.getAdaptersForGame(game.id);
 
-      ref
-          .read(appContextProvider.notifier)
-          .buildContext(
-            game: game,
-            account: account,
-            adapters: adapters,
-            loaderFactory: (scope, adapters) => ResourceLoader(
-              registry: resourceRegistry,
-              scope: scope,
-              adapters: adapters,
-            ),
-          );
-
-      print(
-        '✨ 已重建 AppContext: ${game.id.value}, account: ${_getAccountIdentifier(account)}',
+      notifier.buildContext(
+        game: game,
+        account: account,
+        adapters: adapters,
+        loaderFactory: (scope, adapters, account) => ResourceLoader(
+          registry: resourceRegistry,
+          scope: scope,
+          adapters: adapters,
+          account: account,
+          platformRegistry: platformRegistry,
+        ),
       );
+
+      if (account != null) {
+        CoreLogService.i(
+          '已重建 AppContext: ${game.id.value}, '
+          'account: ${_getAccountIdentifier(account)}',
+        );
+      } else {
+        CoreLogService.i('已重建游客 AppContext: ${game.id.value}');
+      }
     } catch (e) {
-      print('⚠️ 构建应用上下文失败: $e');
+      CoreLogService.w('构建应用上下文失败: $e');
     }
   }
 
@@ -351,10 +375,17 @@ class CoreProvider {
   String _getAccountIdentifier(Account account) {
     // 从凭证中提取账号标识符
     // 不同平台可能有不同的标识字段
-    return account.credentials['external_id']?.toString() ??
-        account.credentials['user_id']?.toString() ??
-        account.credentials['username']?.toString() ??
-        '';
+    return account.externalId ?? account.username ?? account.platformId;
+  }
+
+  Future<void> _warmupIsarForGame(Game game) async {
+    switch (game.id.name) {
+      case 'phigros':
+        await IsarService.instance.phigros.db;
+        break;
+      default:
+        break;
+    }
   }
 
   // ==================== 统计信息 ====================
@@ -365,22 +396,23 @@ class CoreProvider {
       'platforms': platformRegistry.platformCount,
       'games': gameRegistry.gameCount,
       'resources': resourceRegistry.getStats(),
-      'adapters': adapterRegistry.adapterCount,
-      'credential_providers': _credentialProviders.length,
-      'login_handlers': _loginHandlers.length,
+      'adapters': platformRegistry.adapterCount,
+      'credential_providers': platformRegistry.credentialProviderCount,
+      'login_handlers': platformRegistry.loginHandlerCount,
     };
   }
 
   /// 打印服务统计信息
   void printStats() {
     final stats = getStats();
-    print('=== Core Provider Stats ===');
-    print('Platforms: ${stats['platforms']}');
-    print('Games: ${stats['games']}');
-    print('Resources: ${stats['resources']}');
-    print('Adapters: ${stats['adapters']}');
-    print('Credential Providers: ${stats['credential_providers']}');
-    print('Login Handlers: ${stats['login_handlers']}');
-    print('===========================');
+    CoreLogService.i(
+      'Core Provider Stats | '
+      'Platforms: ${stats['platforms']}, '
+      'Games: ${stats['games']}, '
+      'Resources: ${stats['resources']}, '
+      'Adapters: ${stats['adapters']}, '
+      'Credential Providers: ${stats['credential_providers']}, '
+      'Login Handlers: ${stats['login_handlers']}',
+    );
   }
 }

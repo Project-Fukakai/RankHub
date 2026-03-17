@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:get/get.dart';
 import 'package:rank_hub/services/rankhub_api_service.dart';
-import 'package:rank_hub/store/user_store.dart';
 
 class LoginController extends GetxController {
   final RankHubApiService _apiService = RankHubApiService();

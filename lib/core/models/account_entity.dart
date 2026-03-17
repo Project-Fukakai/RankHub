@@ -18,6 +18,9 @@ class AccountEntity {
   /// 账号显示名称
   late String displayName;
 
+  /// 头像 URL
+  String? avatarUrl;
+
   /// 凭证数据（JSON 字符串）
   late String credentialsJson;
 
@@ -36,6 +39,7 @@ class AccountEntity {
     required this.platformId,
     required this.accountIdentifier,
     required this.displayName,
+    this.avatarUrl,
     required this.credentialsJson,
     this.metadataJson,
   }) {

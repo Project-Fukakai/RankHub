@@ -1,17 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:get/get.dart';
 import 'package:rank_hub/games/maimai/models/maimai_song.dart';
+import 'package:rank_hub/games/maimai/viewmodels/maimai_song_view_model.dart';
+import '../services/maimai_isar_service.dart';
 
 /// 曲目信息标签页
-class SongInfoTab extends ConsumerWidget {
+class SongInfoTab extends ConsumerStatefulWidget {
   final MaimaiSong song;
 
   const SongInfoTab({super.key, required this.song});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SongInfoTab> createState() => _SongInfoTabState();
+}
+
+class _SongInfoTabState extends ConsumerState<SongInfoTab> {
+  List<String>? _aliases;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAliases();
+  }
+
+  Future<void> _loadAliases() async {
+    final aliasData = await MaimaiIsarService.instance.getAliasBySongId(
+      widget.song.songId,
+    );
+    if (mounted) {
+      setState(() {
+        _aliases = aliasData?.aliases;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(maimaiSongViewModelProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
     return ListView(
@@ -36,22 +62,22 @@ class SongInfoTab extends ConsumerWidget {
                   context,
                   icon: Icons.music_note,
                   label: '曲名',
-                  value: song.title,
+                  value: widget.song.title,
                   colorScheme: colorScheme,
                 ),
                 const Divider(height: 24),
                 _buildInfoRow(
                   context,
                   icon: Icons.person,
-                  label: '曲师',
-                  value: song.artist,
+                  label: '艺术家',
+                  value: widget.song.artist,
                   colorScheme: colorScheme,
                 ),
-                if (song.aliasList.isNotEmpty) ...[
+                if (_aliases != null && _aliases!.isNotEmpty) ...[
                   const Divider(height: 24),
                   _buildAliasRow(
                     context,
-                    aliases: song.aliasList,
+                    aliases: _aliases!,
                     colorScheme: colorScheme,
                   ),
                 ],
@@ -60,15 +86,17 @@ class SongInfoTab extends ConsumerWidget {
                   context,
                   icon: Icons.category,
                   label: '分类',
-                  value: song.genre,
+                  value: widget.song.genre,
                   colorScheme: colorScheme,
                 ),
+                const Divider(height: 24),
+                _buildSongIdRow(context, colorScheme: colorScheme),
                 const Divider(height: 24),
                 _buildInfoRow(
                   context,
                   icon: Icons.speed,
                   label: 'BPM',
-                  value: song.bpm.toString(),
+                  value: widget.song.bpm.toString(),
                   colorScheme: colorScheme,
                 ),
                 const Divider(height: 24),
@@ -76,20 +104,25 @@ class SongInfoTab extends ConsumerWidget {
                   context,
                   icon: Icons.update,
                   label: '版本',
-                  value: song.title.isEmpty ? '未知' : song.versionTitle,
+                  value: (() {
+                    final label = ref
+                        .read(maimaiSongViewModelProvider.notifier)
+                        .getVersionLabel(widget.song.version);
+                    return label.isEmpty ? '加载中...' : label;
+                  })(),
                   colorScheme: colorScheme,
                 ),
-                if (song.map != null) ...[
+                if (widget.song.map != null) ...[
                   const Divider(height: 24),
                   _buildInfoRow(
                     context,
                     icon: Icons.map,
                     label: '区域',
-                    value: song.map!,
+                    value: widget.song.map!,
                     colorScheme: colorScheme,
                   ),
                 ],
-                if (song.locked) ...[
+                if (widget.song.locked) ...[
                   const Divider(height: 24),
                   _buildInfoRow(
                     context,
@@ -106,7 +139,7 @@ class SongInfoTab extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         // 版权信息卡片
-        if (song.rights != null && song.rights!.isNotEmpty)
+        if (widget.song.rights != null && widget.song.rights!.isNotEmpty)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -130,7 +163,7 @@ class SongInfoTab extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    song.rights!,
+                    widget.song.rights!,
                     style: TextStyle(
                       fontSize: 14,
                       color: colorScheme.onSurfaceVariant,
@@ -209,7 +242,7 @@ class SongInfoTab extends ConsumerWidget {
             Icon(
               Icons.copy,
               size: 16,
-              color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
           ],
         ),
@@ -220,12 +253,97 @@ class SongInfoTab extends ConsumerWidget {
   /// 复制到剪贴板
   void _copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
-    Get.snackbar(
-      '已复制',
-      text,
-      snackPosition: SnackPosition.BOTTOM,
-      duration: const Duration(seconds: 2),
-      margin: const EdgeInsets.all(16),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已复制: $text'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// 构建曲目ID信息行
+  Widget _buildSongIdRow(
+    BuildContext context, {
+    required ColorScheme colorScheme,
+  }) {
+    final hasDx = widget.song.difficulties.dx.isNotEmpty;
+    final standardId = widget.song.songId.toString();
+    final dxId = (widget.song.songId + 10000).toString();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.tag, size: 20, color: colorScheme.primary),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 80,
+            child: Text(
+              '曲目ID',
+              style: TextStyle(
+                fontSize: 14,
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildIdChip(standardId, hasDx ? '标准' : null, colorScheme),
+                if (hasDx) _buildIdChip(dxId, 'DX', colorScheme),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建ID chip
+  Widget _buildIdChip(String id, String? label, ColorScheme colorScheme) {
+    return InkWell(
+      onTap: () => _copyToClipboard(id),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: colorScheme.secondaryContainer.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: colorScheme.outline.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (label != null) ...[
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSecondaryContainer.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              id,
+              style: TextStyle(
+                fontSize: 13,
+                color: colorScheme.onSecondaryContainer,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -235,63 +353,66 @@ class SongInfoTab extends ConsumerWidget {
     required List<String> aliases,
     required ColorScheme colorScheme,
   }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(Icons.subtitles, size: 20, color: colorScheme.primary),
-        const SizedBox(width: 12),
-        SizedBox(
-          width: 80,
-          child: Text(
-            '别名',
-            style: TextStyle(
-              fontSize: 14,
-              color: colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w500,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.subtitles, size: 20, color: colorScheme.primary),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 80,
+            child: Text(
+              '别名',
+              style: TextStyle(
+                fontSize: 14,
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: aliases
-                .map(
-                  (alias) => InkWell(
-                    onTap: () => _copyToClipboard(alias),
-                    borderRadius: BorderRadius.circular(4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        alias,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colorScheme.onPrimaryContainer,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: aliases
+                  .map(
+                    (alias) => InkWell(
+                      onTap: () => _copyToClipboard(alias),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          alias,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colorScheme.onPrimaryContainer,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                )
-                .toList(),
+                  )
+                  .toList(),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   /// 构建谱面统计信息
   Widget _buildDifficultyStats(ColorScheme colorScheme) {
-    final standardCount = song.difficulties.standard.length;
-    final dxCount = song.difficulties.dx.length;
-    final utageCount = song.difficulties.utage.length;
+    final standardCount = widget.song.difficulties.standard.length;
+    final dxCount = widget.song.difficulties.dx.length;
+    final utageCount = widget.song.difficulties.utage.length;
     final totalCount = standardCount + dxCount + utageCount;
 
     return Column(
@@ -350,9 +471,9 @@ class SongInfoTab extends ConsumerWidget {
           width: 48,
           height: 48,
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             shape: BoxShape.circle,
-            border: Border.all(color: color.withOpacity(0.3), width: 2),
+            border: Border.all(color: color.withValues(alpha: 0.3), width: 2),
           ),
           child: Center(
             child: Text(
@@ -377,8 +498,8 @@ class SongInfoTab extends ConsumerWidget {
   /// 构建定数范围信息
   Widget _buildLevelRange(ColorScheme colorScheme) {
     final allDifficulties = [
-      ...song.difficulties.standard,
-      ...song.difficulties.dx,
+      ...widget.song.difficulties.standard,
+      ...widget.song.difficulties.dx,
     ];
 
     if (allDifficulties.isEmpty) return const SizedBox.shrink();

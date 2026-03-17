@@ -11,13 +11,24 @@ class PhigrosAvatar {
   @Index(unique: true)
   late String avatarName;
 
+  /// 资源 key（来自公共资源）
+  String? addressableKey;
+
   /// 头像URL
   String get avatarUrl =>
       'https://ghfast.top/https://raw.githubusercontent.com/7aGiven/Phigros_Resource/refs/heads/avatar/$avatarName.png';
 
   PhigrosAvatar();
 
+  factory PhigrosAvatar.fromAllInfo(Map<String, dynamic> json) {
+    return PhigrosAvatar()
+      ..avatarName = json['name'] as String? ?? ''
+      ..addressableKey = json['addressable_key'] as String?;
+  }
+
   factory PhigrosAvatar.fromName(String name) {
-    return PhigrosAvatar()..avatarName = name.trim();
+    return PhigrosAvatar()
+      ..avatarName = name.trim()
+      ..addressableKey = null;
   }
 }

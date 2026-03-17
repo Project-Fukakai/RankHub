@@ -1,7 +1,7 @@
 import 'package:rank_hub/services/base_isar_service.dart';
-import 'package:rank_hub/modules/lxns/services/maimai_isar_service.dart';
+import 'package:rank_hub/games/maimai/services/maimai_isar_service.dart';
 import 'package:rank_hub/modules/musedash/services/musedash_isar_service.dart';
-import 'package:rank_hub/modules/phigros/services/phigros_isar_service.dart';
+import 'package:rank_hub/games/phigros/services/phigros_isar_service.dart';
 import 'package:rank_hub/modules/osu/services/osu_isar_service.dart';
 import 'package:rank_hub/services/account_isar_service.dart';
 

@@ -1,10 +1,15 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:rank_hub/games/maimai/models/enums/level_index.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rank_hub/games/maimai/models/maimai_song.dart';
+import 'package:rank_hub/games/maimai/models/enums/level_index.dart';
+import 'package:rank_hub/games/maimai/pages/song_detail_page.dart'
+    as maimai_pages;
+import '../services/lxns_api_service.dart';
+import 'package:rank_hub/core/detail_navigation.dart';
 
-class SongListItem extends StatelessWidget {
+/// 曲目列表项
+class SongListItem extends ConsumerWidget {
   final MaimaiSong song;
 
   const SongListItem({super.key, required this.song});
@@ -107,7 +112,7 @@ class SongListItem extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
@@ -124,7 +129,7 @@ class SongListItem extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: CachedNetworkImage(
-              imageUrl: song.jacketUrl,
+              imageUrl: LxnsApiService.getJacketUrl(song.songId),
               fit: BoxFit.cover,
               placeholder: (context, url) => Center(
                 child: SizedBox(
@@ -170,7 +175,10 @@ class SongListItem extends StatelessWidget {
           color: colorScheme.onSurfaceVariant,
         ),
         onTap: () {
-          context.go('/maimai/song/${song.songId}');
+          pushDetailPage(
+            context,
+            maimai_pages.SongDetailPage(song: song),
+          );
         },
       ),
     );

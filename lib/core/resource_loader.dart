@@ -1,15 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:rank_hub/core/account.dart';
 import 'package:rank_hub/core/data_definition.dart';
 import 'package:rank_hub/core/game_resource.dart';
 import 'package:rank_hub/core/platform_adapter.dart';
 import 'package:rank_hub/core/resource_key.dart';
 import 'package:rank_hub/core/resource_scope.dart';
+import 'package:rank_hub/core/services/core_log_service.dart';
 import 'package:rank_hub/core/services/resource_cache_service.dart';
+import 'package:rank_hub/platforms/platform_registry.dart';
 
 class ResourceLoader {
   final ResourceRegistry registry;
   final ResourceScope scope;
   final List<PlatformAdapter> adapters;
+  final Account? account;
+  final PlatformRegistry platformRegistry;
 
   final Map<ResourceKey, ResourceState> _state = {};
   final Map<ResourceKey, Future> _inflight = {};
@@ -19,18 +24,14 @@ class ResourceLoader {
     required this.registry,
     required this.scope,
     required this.adapters,
+    this.account,
+    required this.platformRegistry,
   });
 
   /// 强制加载（如果未加载或已过期）
   /// 如果数据已加载且未过期，直接返回缓存数据
   Future<T> load<T>(ResourceKey key) async {
-    // 检测循环依赖
-    if (_loadingStack.contains(key)) {
-      throw Exception(
-        'Circular dependency detected: ${_buildDependencyChain(key)}',
-      );
-    }
-
+    var allowCache = true;
     // 已有数据
     final existing = _state[key];
     if (existing is AsyncData<T>) {
@@ -40,11 +41,19 @@ class ResourceLoader {
         return existing.value;
       }
       // 已过期，需要重新加载
+      allowCache = false;
     }
 
     // 已在加载中
     if (_inflight.containsKey(key)) {
       return await _inflight[key] as T;
+    }
+
+    // 检测循环依赖（允许等待已在加载中的依赖）
+    if (_loadingStack.contains(key)) {
+      throw Exception(
+        'Circular dependency detected: ${_buildDependencyChain(key)}',
+      );
     }
 
     final def = registry.find<T>(key);
@@ -59,7 +68,7 @@ class ResourceLoader {
       // 先加载依赖
       await _loadDependencies(def.dependencies);
 
-      final future = _doLoad<T>(key, def);
+      final future = _doLoad<T>(key, def, allowCache: allowCache);
       _inflight[key] = future;
 
       try {
@@ -214,7 +223,7 @@ class ResourceLoader {
     }
 
     if (!scope.hasAccount) {
-      return true; // 没有账号，认为已过期
+      return false; // 游客模式不做过期检查，避免反复远端拉取
     }
 
     // 从数据库检查过期状态
@@ -226,7 +235,7 @@ class ResourceLoader {
       );
       return isExpired;
     } catch (e) {
-      print('检查资源过期状态失败: $e');
+      CoreLogService.w('检查资源过期状态失败: $e');
       return true; // 出错时认为已过期
     }
   }
@@ -250,7 +259,7 @@ class ResourceLoader {
         isAccountRelated: def.accountRelated,
       );
     } catch (e) {
-      print('记录资源加载时间失败: $e');
+      CoreLogService.w('记录资源加载时间失败: $e');
     }
   }
 
@@ -265,18 +274,22 @@ class ResourceLoader {
         accountIdentifier: scope.accountIdentifier!,
       );
     } catch (e) {
-      print('清除资源缓存记录失败: $e');
+      CoreLogService.w('清除资源缓存记录失败: $e');
     }
   }
 
   /// 内部加载逻辑
-  Future<T> _doLoad<T>(ResourceKey key, GameResourceDefinition<T> def) async {
+  Future<T> _doLoad<T>(
+    ResourceKey key,
+    GameResourceDefinition<T> def, {
+    required bool allowCache,
+  }) async {
     _state[key] = const AsyncLoading();
 
     try {
-      if (!def.forceRefreshWhenTriggered) {
+      if (allowCache && !def.forceRefreshWhenTriggered) {
         // 本地缓存
-        final cached = def.loadCache();
+        final cached = await def.loadCache(scope, account);
         if (cached != null) {
           _state[key] = AsyncData(cached);
           await _recordLoadTime(key); // 记录加载时间
@@ -284,8 +297,10 @@ class ResourceLoader {
         }
       }
 
+      final resolvedAdapters = _resolveAdaptersForResource(def, key);
+
       // 远端拉取（只传递 scope 和 adapters）
-      final data = await def.fetch(scope, adapters);
+      final data = await def.fetch(key, scope, resolvedAdapters, account);
 
       // 持久化
       await def.persist(data);
@@ -297,6 +312,43 @@ class ResourceLoader {
       _state[key] = AsyncError(e, st);
       rethrow;
     }
+  }
+
+  List<PlatformAdapter> _resolveAdaptersForResource(
+    GameResourceDefinition def,
+    ResourceKey key,
+  ) {
+    final platforms = platformRegistry.getPlatformsForResource(
+      scope.gameId,
+      key,
+    );
+
+    if (def.accountRelated) {
+      if (account == null) {
+        throw Exception('Account required for resource: ${key.fullKey}');
+      }
+      final isSupported = platforms.any(
+        (platform) => platform.id.value == account!.platformId,
+      );
+      if (!isSupported) {
+        throw Exception(
+          'Account platform cannot provide resource: ${key.fullKey}',
+        );
+      }
+    }
+
+    final resolved = platformRegistry.resolveAdaptersForResource(
+      gameId: scope.gameId,
+      key: key,
+      accountRelated: def.accountRelated,
+      accountPlatformId: account?.platformId,
+    );
+
+    if (def.accountRelated) {
+      return resolved;
+    }
+
+    return resolved.isEmpty ? adapters : resolved;
   }
 
   /// 给 UI / Provider 监听

@@ -37,8 +37,8 @@ class OsuLoginHandler extends PlatformLoginHandler {
   String get platformDescription => 'osu! 官服 - 使用 OAuth2 授权登录';
 
   @override
-  Future<PlatformLoginResult?> showLoginPage(BuildContext context) async {
-    return await performOAuth2Login();
+  Widget buildLoginPage(BuildContext context) {
+    return const _OsuLoginPage();
   }
 
   /// 执行 OAuth2 登录流程
@@ -441,5 +441,86 @@ class OsuLoginHandler extends PlatformLoginHandler {
       print('❌ 刷新失败: $e');
       Get.snackbar('刷新失败', e.toString());
     }
+  }
+}
+
+class _OsuLoginPage extends StatefulWidget {
+  const _OsuLoginPage();
+
+  @override
+  State<_OsuLoginPage> createState() => _OsuLoginPageState();
+}
+
+class _OsuLoginPageState extends State<_OsuLoginPage> {
+  bool _isLoading = false;
+
+  Future<void> _startLogin() async {
+    setState(() => _isLoading = true);
+    try {
+      final handler = OsuLoginHandler();
+      final result = await handler.performOAuth2Login();
+      if (mounted) {
+        if (result != null) {
+          Navigator.pop(context, result);
+        } else {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('登录失败，请重试')));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('登录失败: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('osu! 登录')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.music_note, size: 80, color: Colors.pinkAccent),
+              const SizedBox(height: 24),
+              Text(
+                'osu! Bancho',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              const Text('使用 OAuth2 安全授权登录'),
+              const SizedBox(height: 48),
+              FilledButton.icon(
+                onPressed: _isLoading ? null : _startLogin,
+                icon: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.login),
+                label: Text(_isLoading ? '登录中...' : '开始授权'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

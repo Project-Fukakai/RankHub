@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:rank_hub/controllers/game_controller.dart';
-import 'package:rank_hub/widgets/game_selector_sheet.dart';
+import 'package:rank_hub/widgets/legacy_game_selector_sheet.dart';
 
 class RankPage extends GetView<GameController> {
   const RankPage({super.key});
 
   void _showGameSelector() {
     final games = controller.getAvailableGames();
-    GameSelectorSheet.show(
+    LegacyGameSelectorSheet.show(
       Get.context!,
       games: games,
       selectedGame: controller.selectedRankGame,

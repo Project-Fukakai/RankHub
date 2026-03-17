@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:rank_hub/core/account.dart';
 import 'package:rank_hub/core/game.dart';
 import 'package:rank_hub/core/models/account_entity.dart';
+import 'package:rank_hub/core/services/core_log_service.dart';
 import 'package:rank_hub/core/services/resource_cache_service.dart';
 
 /// 存储服务
@@ -43,7 +44,7 @@ class CoreStorageService {
 
       _initialized = true;
     } catch (e) {
-      print('存储服务初始化失败: $e');
+      CoreLogService.e('存储服务初始化失败: $e');
       rethrow;
     }
   }
@@ -55,20 +56,23 @@ class CoreStorageService {
   }
 
   /// 保存账号
-  Future<void> saveAccount(
-    Account account,
-    String accountIdentifier,
-    String displayName,
-  ) async {
+  Future<void> saveAccount(Account account, String accountIdentifier) async {
     _ensureInitialized();
 
     final credentialsJson = jsonEncode(account.credentials);
+    final metadataJson = account.metadata.isNotEmpty
+        ? jsonEncode(account.metadata)
+        : null;
+    final resolvedDisplayName = _resolveDisplayName(account) ?? 'Unknown';
+    final resolvedAvatarUrl = _resolveAvatarUrl(account);
 
     final entity = AccountEntity.create(
       platformId: account.platformId,
       accountIdentifier: accountIdentifier,
-      displayName: displayName,
+      displayName: resolvedDisplayName,
+      avatarUrl: resolvedAvatarUrl,
       credentialsJson: credentialsJson,
+      metadataJson: metadataJson,
     );
 
     await _isar!.writeTxn(() async {
@@ -85,6 +89,12 @@ class CoreStorageService {
         entity.id = existing.id;
         entity.createdAt = existing.createdAt;
         entity.updatedAt = DateTime.now();
+        if (entity.avatarUrl == null || entity.avatarUrl!.isEmpty) {
+          entity.avatarUrl = existing.avatarUrl;
+        }
+        if (entity.metadataJson == null || entity.metadataJson!.isEmpty) {
+          entity.metadataJson = existing.metadataJson;
+        }
       }
 
       await _isar!.accountEntitys.put(entity);
@@ -100,11 +110,7 @@ class CoreStorageService {
         .platformIdEqualTo(platformId)
         .findAll();
 
-    return entities.map((entity) {
-      final credentials =
-          jsonDecode(entity.credentialsJson) as Map<String, dynamic>;
-      return Account(platformId: entity.platformId, credentials: credentials);
-    }).toList();
+    return entities.map(_buildAccountFromEntity).toList();
   }
 
   /// 获取所有账号
@@ -113,11 +119,7 @@ class CoreStorageService {
 
     final entities = await _isar!.accountEntitys.where().findAll();
 
-    return entities.map((entity) {
-      final credentials =
-          jsonDecode(entity.credentialsJson) as Map<String, dynamic>;
-      return Account(platformId: entity.platformId, credentials: credentials);
-    }).toList();
+    return entities.map(_buildAccountFromEntity).toList();
   }
 
   /// 获取账号实体（包含显示名称等元数据）
@@ -240,9 +242,37 @@ class CoreStorageService {
     final entity = await getAccountEntity(platformId, accountIdentifier);
     if (entity == null) return null;
 
+    return _buildAccountFromEntity(entity);
+  }
+
+  Account _buildAccountFromEntity(AccountEntity entity) {
     final credentials =
         jsonDecode(entity.credentialsJson) as Map<String, dynamic>;
-    return Account(platformId: entity.platformId, credentials: credentials);
+    final metadata = entity.metadataJson == null || entity.metadataJson!.isEmpty
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(
+            jsonDecode(entity.metadataJson!) as Map,
+          );
+
+    return Account(
+      platformId: entity.platformId,
+      credentials: credentials,
+      displayName: entity.displayName,
+      avatarUrl: entity.avatarUrl,
+      metadata: metadata,
+    );
+  }
+
+  String? _resolveDisplayName(Account account) {
+    final candidate = account.resolvedDisplayName;
+    if (candidate == null || candidate.isEmpty) return null;
+    return candidate;
+  }
+
+  String? _resolveAvatarUrl(Account account) {
+    final candidate = account.resolvedAvatarUrl;
+    if (candidate == null || candidate.isEmpty) return null;
+    return candidate;
   }
 
   /// 清除指定账号相关的所有游戏选择
@@ -341,7 +371,7 @@ class CoreStorageService {
         );
       } catch (e) {
         // 如果找不到上次选择的游戏，使用第一个
-        print('上次选择的游戏 $lastGameId 不存在，使用第一个游戏');
+        CoreLogService.w('上次选择的游戏 $lastGameId 不存在，使用第一个游戏');
         selectedGame = availableGames.first;
       }
     } else {

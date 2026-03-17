@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:rank_hub/games/maimai/models/enums/rate_type.dart';
 import 'package:rank_hub/games/maimai/models/maimai_score.dart';
+import 'package:rank_hub/games/maimai/models/enums/rate_type.dart';
 import 'dx_score_progress.dart';
 
 /// 当前成绩卡片
@@ -48,7 +48,7 @@ class CurrentScoreCard extends StatelessWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: _getRankColor(score.rate!).withOpacity(0.2),
+                          color: _getRankColor(score.rate!).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: _getRankColor(score.rate!),
@@ -109,8 +109,8 @@ class CurrentScoreCard extends StatelessWidget {
                         255,
                         39,
                         176,
-                        39,
-                      ).withOpacity(0.2),
+                        112,
+                      ).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.purple, width: 1.5),
                     ),
@@ -132,7 +132,7 @@ class CurrentScoreCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.2),
+                      color: Colors.blue.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.blue, width: 1.5),
                     ),

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:data_table_2/data_table_2.dart';
-import 'package:rank_hub/models/maimai/notes.dart';
+import 'package:rank_hub/games/maimai/models/maimai_notes.dart';
 
 /// 物量表格组件
 class NoteTable extends StatelessWidget {
-  final Notes notes;
+  final MaimaiNotes notes;
   final int calculateMode;
 
   const NoteTable({
@@ -33,7 +33,7 @@ class NoteTable extends StatelessWidget {
 
   /// 生成结果
   Map<String, Map<String, String>> _generateResults(
-    Notes notes,
+    MaimaiNotes notes,
     double x,
     double y,
     int mode,

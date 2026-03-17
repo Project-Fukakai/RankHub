@@ -43,7 +43,11 @@ class ResourceRegistryProvider implements ResourceRegistry {
   /// 查找资源定义
   @override
   GameResourceDefinition<T>? find<T>(ResourceKey key) {
-    final def = _resources[key.fullKey];
+    final def =
+        _resources[key.fullKey] ??
+        (key.scope != null
+            ? _resources[ResourceKey(namespace: key.namespace, name: key.name).fullKey]
+            : null);
     if (def == null) return null;
 
     // 类型检查

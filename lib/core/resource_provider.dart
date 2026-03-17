@@ -31,8 +31,15 @@ import 'package:rank_hub/core/resource_key.dart';
 /// // 强制刷新资源
 /// await ref.read(refreshResourceProviderOf<List<Song>>(songListKey).future);
 /// ```
+final Map<ResourceKey, FutureProvider<dynamic>> _resourceProviders = {};
+
 FutureProvider<T> resourceProviderOf<T>(ResourceKey<T> key) {
-  return FutureProvider.autoDispose<T>((ref) async {
+  final existing = _resourceProviders[key];
+  if (existing != null) {
+    return existing as FutureProvider<T>;
+  }
+
+  final provider = FutureProvider<T>((ref) async {
     // 获取当前的 AppContext
     // 监听 appContextProvider,当账号切换时会自动触发重建
     final appContext = ref.watch(appContextProvider);
@@ -46,6 +53,9 @@ FutureProvider<T> resourceProviderOf<T>(ResourceKey<T> key) {
     final result = await appContext.load(key);
     return result as T;
   });
+
+  _resourceProviders[key] = provider;
+  return provider;
 }
 
 /// 强制刷新指定资源
@@ -62,7 +72,10 @@ FutureProvider<void> refreshResourceProviderOf<T>(ResourceKey<T> key) {
     await appContext.forceRefresh(key);
 
     // 触发 resourceProviderOf 重新加载
-    ref.invalidate(resourceProviderOf<T>(key));
+    final provider = _resourceProviders[key];
+    if (provider != null) {
+      ref.invalidate(provider);
+    }
   });
 }
 

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:rank_hub/models/game.dart';
+import 'package:rank_hub/core/game.dart';
+import 'package:rank_hub/core/game_descriptor.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 /// 游戏选择器底部弹窗
 class GameSelectorSheet {
   static Future<void> show(
     BuildContext context, {
-    required List<IGame> games,
-    required IGame? selectedGame,
-    required Function(IGame) onGameSelected,
+    required List<Game> games,
+    required Game? selectedGame,
+    required Function(Game) onGameSelected,
     String title = '选择游戏',
   }) async {
     await showModalBottomSheet(
@@ -26,9 +27,9 @@ class GameSelectorSheet {
 }
 
 class _GameSelectorContent extends StatelessWidget {
-  final List<IGame> games;
-  final IGame? selectedGame;
-  final Function(IGame) onGameSelected;
+  final List<Game> games;
+  final Game? selectedGame;
+  final Function(Game) onGameSelected;
   final String title;
 
   const _GameSelectorContent({
@@ -116,16 +117,6 @@ class _GameSelectorContent extends StatelessWidget {
                           },
                         ),
                       ),
-                      // 提示信息
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                        child: Text(
-                          '没有找到需要的游戏？你可能需要切换平台',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: colorScheme.onSurfaceVariant),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
                     ],
                   ),
           ),
@@ -136,18 +127,13 @@ class _GameSelectorContent extends StatelessWidget {
 
   Widget _buildGameTile(
     BuildContext context,
-    IGame game,
+    Game game,
     bool isSelected,
     VoidCallback onTap,
   ) {
-    // 如果游戏提供了自定义列表项，使用自定义样式
-    final customTile = game.buildSelectorListTile(context, isSelected, onTap);
-    if (customTile != null) {
-      return customTile;
-    }
-
-    // 默认样式
     final colorScheme = Theme.of(context).colorScheme;
+    final descriptor = game.descriptor;
+    final description = _buildGameDescription(descriptor);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -168,11 +154,11 @@ class _GameSelectorContent extends StatelessWidget {
           child: Row(
             children: [
               // 游戏图标
-              if (game.iconUrl != null)
+              if (descriptor.iconUrl != null)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: CachedNetworkImage(
-                    imageUrl: game.iconUrl!,
+                    imageUrl: descriptor.iconUrl!,
                     width: 48,
                     height: 48,
                     fit: BoxFit.cover,
@@ -188,10 +174,13 @@ class _GameSelectorContent extends StatelessWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: game.color ?? colorScheme.primary,
+                        color: descriptor.themeColor ?? colorScheme.primary,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(game.icon, color: Colors.white),
+                      child: Icon(
+                        descriptor.iconData ?? Icons.videogame_asset,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 )
@@ -200,10 +189,13 @@ class _GameSelectorContent extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: game.color ?? colorScheme.primary,
+                    color: descriptor.themeColor ?? colorScheme.primary,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(game.icon, color: Colors.white),
+                  child: Icon(
+                    descriptor.iconData ?? Icons.videogame_asset,
+                    color: Colors.white,
+                  ),
                 ),
 
               const SizedBox(width: 16),
@@ -222,10 +214,10 @@ class _GameSelectorContent extends StatelessWidget {
                             : colorScheme.onSurface,
                       ),
                     ),
-                    if (game.description.isNotEmpty) ...[
+                    if (description.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        game.description,
+                        description,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: isSelected
                               ? colorScheme.onPrimaryContainer.withOpacity(0.7)
@@ -283,5 +275,12 @@ class _GameSelectorContent extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _buildGameDescription(GameDescriptor descriptor) {
+    if (descriptor.supportedPlatformIds.isEmpty) {
+      return '';
+    }
+    return '平台: ${descriptor.supportedPlatformIds.join(' / ')}';
   }
 }

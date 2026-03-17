@@ -20,6 +20,9 @@ class PhigrosSong {
   /// 曲绘画师
   String? illustrator;
 
+  /// 资源 key
+  String? songKey;
+
   /// EZ谱师
   String? chartDesignerEZ;
 
@@ -47,6 +50,21 @@ class PhigrosSong {
   /// AT定数（如有）
   double? difficultyAT;
 
+  /// 预览开始时间
+  double? previewTime;
+
+  /// 预览结束时间
+  double? previewEndTime;
+
+  /// BPM
+  String? bpm;
+
+  /// 曲目时长
+  String? length;
+
+  /// 所属章节
+  String? chapter;
+
   /// 是否有AT难度
   bool get hasAT => difficultyAT != null && difficultyAT! > 0;
 
@@ -63,6 +81,46 @@ class PhigrosSong {
       'https://ghfast.top/https://raw.githubusercontent.com/7aGiven/Phigros_Resource/refs/heads/illustrationLowRes/$songId.png';
 
   PhigrosSong();
+
+  static String _normalizeSongId(String rawId) {
+    if (rawId.endsWith('.0')) {
+      return rawId.substring(0, rawId.length - 2);
+    }
+    return rawId;
+  }
+
+  static double? _numToDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  factory PhigrosSong.fromAllInfo(Map<String, dynamic> json) {
+    final levels = json['levels'] as Map<String, dynamic>? ?? {};
+    final ez = levels['EZ'] as Map<String, dynamic>?;
+    final hd = levels['HD'] as Map<String, dynamic>?;
+    final inn = levels['IN'] as Map<String, dynamic>?;
+    final at = levels['AT'] as Map<String, dynamic>?;
+    return PhigrosSong()
+      ..songId = _normalizeSongId(json['id'] as String? ?? '')
+      ..songKey = json['key'] as String?
+      ..name = json['name'] as String? ?? ''
+      ..composer = json['composer'] as String? ?? ''
+      ..illustrator = json['illustrator'] as String?
+      ..chartDesignerEZ = ez?['charter'] as String?
+      ..chartDesignerHD = hd?['charter'] as String?
+      ..chartDesignerIN = inn?['charter'] as String?
+      ..chartDesignerAT = at?['charter'] as String?
+      ..difficultyEZ = _numToDouble(ez?['difficulty'])
+      ..difficultyHD = _numToDouble(hd?['difficulty'])
+      ..difficultyIN = _numToDouble(inn?['difficulty'])
+      ..difficultyAT = _numToDouble(at?['difficulty'])
+      ..previewTime = _numToDouble(json['preview_time'])
+      ..previewEndTime = _numToDouble(json['preview_end_time'])
+      ..bpm = null
+      ..length = null
+      ..chapter = null;
+  }
 
   /// 从info.tsv和difficulty.tsv的数据创建
   factory PhigrosSong.fromTsvData({

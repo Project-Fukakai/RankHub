@@ -69,7 +69,7 @@ class ScoreHistoryChart extends StatelessWidget {
           horizontalInterval: yInterval,
           getDrawingHorizontalLine: (value) {
             return FlLine(
-              color: colorScheme.outlineVariant.withOpacity(0.3),
+              color: colorScheme.outlineVariant.withValues(alpha: 0.3),
               strokeWidth: 1,
             );
           },
@@ -159,7 +159,7 @@ class ScoreHistoryChart extends StatelessWidget {
             ),
             belowBarData: BarAreaData(
               show: true,
-              color: colorScheme.primary.withOpacity(0.1),
+              color: colorScheme.primary.withValues(alpha: 0.1),
             ),
           ),
         ],

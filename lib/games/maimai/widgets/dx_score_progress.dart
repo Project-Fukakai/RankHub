@@ -27,6 +27,9 @@ class DxScoreProgress extends StatelessWidget {
     // 根据星级获取颜色
     final color = _getColorByStars(stars);
 
+    // 计算距离下一阶段所需
+    final nextStarInfo = _calculateNextStarInfo(percentage, maxDxScore);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -73,11 +76,23 @@ class DxScoreProgress extends StatelessWidget {
             ],
           ],
         ),
+        if (nextStarInfo != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            '距离${nextStarInfo['nextStars']}星还需: ${nextStarInfo['needed']} (${nextStarInfo['nextPercentage']}%)',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(
+              context,
+            ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+          ),
+          ),
+        ],
         const SizedBox(height: 8),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
-            value: percentage / 100,
+            value: _calculateProgressValue(percentage),
             backgroundColor: Theme.of(
               context,
             ).colorScheme.surfaceContainerHighest,
@@ -99,6 +114,14 @@ class DxScoreProgress extends StatelessWidget {
     return 0;
   }
 
+  /// 计算进度条值（85%-100%区间映射到0-1）
+  double _calculateProgressValue(double percentage) {
+    if (percentage < 85.0) return 0.0;
+    if (percentage >= 100.0) return 1.0;
+    // 将 85%-100% 映射到 0-1
+    return (percentage - 85.0) / 15.0;
+  }
+
   /// 根据星级获取颜色
   Color _getColorByStars(int stars) {
     switch (stars) {
@@ -113,5 +136,45 @@ class DxScoreProgress extends StatelessWidget {
       default:
         return Colors.grey; // 灰色 无星
     }
+  }
+
+  /// 计算距离下一阶段所需信息
+  Map<String, dynamic>? _calculateNextStarInfo(
+    double currentPercentage,
+    int maxDxScore,
+  ) {
+    double? nextPercentage;
+    int? nextStars;
+
+    if (currentPercentage < 85.0) {
+      nextPercentage = 85.0;
+      nextStars = 1;
+    } else if (currentPercentage < 90.0) {
+      nextPercentage = 90.0;
+      nextStars = 2;
+    } else if (currentPercentage < 93.0) {
+      nextPercentage = 93.0;
+      nextStars = 3;
+    } else if (currentPercentage < 95.0) {
+      nextPercentage = 95.0;
+      nextStars = 4;
+    } else if (currentPercentage < 97.0) {
+      nextPercentage = 97.0;
+      nextStars = 5;
+    }
+
+    if (nextPercentage == null || nextStars == null) {
+      return null; // 已达到最高星级
+    }
+
+    // 计算需要的 DX Score
+    final neededDxScore =
+        ((nextPercentage / 100) * maxDxScore).ceil() - currentDxScore;
+
+    return {
+      'nextStars': nextStars,
+      'nextPercentage': nextPercentage.toStringAsFixed(0),
+      'needed': neededDxScore > 0 ? neededDxScore : 0,
+    };
   }
 }

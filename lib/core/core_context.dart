@@ -73,6 +73,7 @@ class AppContextNotifier extends Notifier<AppContext?> {
     required ResourceLoader Function(
       ResourceScope scope,
       List<PlatformAdapter> adapters,
+      Account? account,
     )
     loaderFactory,
   }) {
@@ -89,7 +90,7 @@ class AppContextNotifier extends Notifier<AppContext?> {
           );
 
     // 创建新的 Loader
-    final loader = loaderFactory(scope, adapters);
+    final loader = loaderFactory(scope, adapters, account);
 
     // 构建新的 Context
     state = AppContext(
@@ -108,10 +109,7 @@ class AppContextNotifier extends Notifier<AppContext?> {
 
   /// 从账号中提取标识符
   String _extractAccountIdentifier(Account account) {
-    return account.credentials['external_id']?.toString() ??
-        account.credentials['user_id']?.toString() ??
-        account.credentials['username']?.toString() ??
-        account.platformId;
+    return account.externalId ?? account.username ?? account.platformId;
   }
 }
 

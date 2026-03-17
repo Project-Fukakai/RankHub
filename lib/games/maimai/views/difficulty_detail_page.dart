@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rank_hub/games/maimai/maimai_providers.dart';
-import 'package:rank_hub/models/maimai/enums/level_index.dart';
+import 'package:rank_hub/games/maimai/models/enums/level_index.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../widgets/note_table.dart';
@@ -53,6 +53,8 @@ class _DifficultyDetailPageState extends ConsumerState<DifficultyDetailPage>
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final difficultyColor = _getDifficultyColor();
+    final width = MediaQuery.of(context).size.width;
+    final isEmbeddedMode = width >= 1024;
 
     // 通过 provider 获取成绩
     final currentScore = ref.watch(maimaiScoreByIdProvider(widget.songId));
@@ -60,6 +62,7 @@ class _DifficultyDetailPageState extends ConsumerState<DifficultyDetailPage>
     return Scaffold(
       appBar: AppBar(
         centerTitle: false,
+        automaticallyImplyLeading: !isEmbeddedMode,
         title: Row(
           children: [
             ClipRRect(

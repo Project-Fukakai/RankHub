@@ -2,6 +2,7 @@ import 'package:isar_community/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:rank_hub/core/models/resource_cache_entity.dart';
 import 'package:rank_hub/core/resource_key.dart';
+import 'package:rank_hub/core/services/core_log_service.dart';
 
 /// 资源缓存服务
 /// 使用 Isar 数据库记录资源的加载时间和过期时间
@@ -42,9 +43,11 @@ class ResourceCacheService {
       await _loadAllToMemory();
 
       _initialized = true;
-      print('✅ 资源缓存服务初始化完成，已加载 ${_memoryCache.length} 条缓存记录');
+      CoreLogService.i(
+        '资源缓存服务初始化完成，已加载 ${_memoryCache.length} 条缓存记录',
+      );
     } catch (e) {
-      print('资源缓存服务初始化失败: $e');
+      CoreLogService.e('资源缓存服务初始化失败: $e');
       rethrow;
     }
   }
@@ -138,7 +141,7 @@ class ResourceCacheService {
           await _isar!.resourceCacheEntitys.put(entity);
         });
       } catch (e) {
-        print('异步写入资源缓存失败: $e');
+        CoreLogService.w('异步写入资源缓存失败: $e');
       }
     });
   }
@@ -209,7 +212,7 @@ class ResourceCacheService {
               .deleteAll();
         });
       } catch (e) {
-        print('异步删除资源缓存失败: $e');
+        CoreLogService.w('异步删除资源缓存失败: $e');
       }
     });
   }
@@ -236,7 +239,7 @@ class ResourceCacheService {
       _memoryCache.remove(key);
     }
 
-    print('🗑️ 已从内存清除 ${keysToRemove.length} 条账号关联缓存');
+    CoreLogService.i('已从内存清除 ${keysToRemove.length} 条账号关联缓存');
 
     // 异步从数据库删除
     Future.microtask(() async {
@@ -249,7 +252,7 @@ class ResourceCacheService {
               .deleteAll();
         });
       } catch (e) {
-        print('异步删除账号关联缓存失败: $e');
+        CoreLogService.w('异步删除账号关联缓存失败: $e');
       }
     });
   }
@@ -275,7 +278,7 @@ class ResourceCacheService {
       _memoryCache.remove(key);
     }
 
-    print('🗑️ 已从内存清除 ${keysToRemove.length} 条账号缓存');
+    CoreLogService.i('已从内存清除 ${keysToRemove.length} 条账号缓存');
 
     // 异步从数据库删除
     Future.microtask(() async {
@@ -287,7 +290,7 @@ class ResourceCacheService {
               .deleteAll();
         });
       } catch (e) {
-        print('异步删除账号缓存失败: $e');
+        CoreLogService.w('异步删除账号缓存失败: $e');
       }
     });
   }
@@ -310,7 +313,7 @@ class ResourceCacheService {
       _memoryCache.remove(key);
     }
 
-    print('🗑️ 已从内存清除 ${keysToRemove.length} 条过期缓存');
+    CoreLogService.i('已从内存清除 ${keysToRemove.length} 条过期缓存');
 
     // 异步从数据库删除
     Future.microtask(() async {
@@ -322,7 +325,7 @@ class ResourceCacheService {
               .deleteAll();
         });
       } catch (e) {
-        print('异步删除过期缓存失败: $e');
+        CoreLogService.w('异步删除过期缓存失败: $e');
       }
     });
   }
@@ -365,7 +368,7 @@ class ResourceCacheService {
     if (!_initialized || _isar == null) return;
 
     try {
-      print('💾 开始同步资源缓存到数据库...');
+      CoreLogService.i('开始同步资源缓存到数据库...');
 
       await _isar!.writeTxn(() async {
         for (final entity in _memoryCache.values) {
@@ -384,9 +387,9 @@ class ResourceCacheService {
         }
       });
 
-      print('✅ 资源缓存同步完成，共 ${_memoryCache.length} 条记录');
+      CoreLogService.i('资源缓存同步完成，共 ${_memoryCache.length} 条记录');
     } catch (e) {
-      print('❌ 同步资源缓存失败: $e');
+      CoreLogService.e('同步资源缓存失败: $e');
     }
   }
 

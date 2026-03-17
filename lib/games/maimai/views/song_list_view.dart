@@ -24,13 +24,15 @@ class SongListView extends ConsumerWidget {
           },
         ),
         onRefresh: () async {
-          ref.refresh(
-            resourceProviderOf<List<MaimaiSong>>(maimaiSongListResourceKey),
+          final provider = resourceProviderOf<List<MaimaiSong>>(
+            maimaiSongListResourceKey,
           );
+          ref.invalidate(provider);
+          await ref.read(provider.future);
         },
       ),
       AsyncLoading() => const Center(child: CircularProgressIndicator()),
-      AsyncError(error: var error, stackTrace: var stackTrace) => Center(
+      AsyncError(error: var error, stackTrace: _) => Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -44,7 +46,7 @@ class SongListView extends ConsumerWidget {
             SizedBox(height: 8),
             TextButton(
               onPressed: () {
-                ref.refresh(
+                ref.invalidate(
                   resourceProviderOf<List<MaimaiSong>>(
                     maimaiSongListResourceKey,
                   ),

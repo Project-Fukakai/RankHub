@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:rank_hub/models/maimai/notes.dart';
+import 'package:rank_hub/games/maimai/models/maimai_notes.dart';
 
 /// 容错计算器组件
 class ToleranceCalculator extends StatefulWidget {
-  final Notes notes;
+  final MaimaiNotes notes;
 
   const ToleranceCalculator({super.key, required this.notes});
 
@@ -259,7 +259,7 @@ class _ToleranceCalculatorState extends State<ToleranceCalculator> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(

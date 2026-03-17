@@ -1,4 +1,5 @@
 import 'package:rank_hub/core/account.dart';
+import 'package:rank_hub/core/credential.dart';
 import 'package:rank_hub/core/platform_id.dart';
 
 /// 凭据过期异常
@@ -42,8 +43,11 @@ abstract class ApiKeyCredentialProvider extends CredentialProvider {
   @override
   Future<Account> getCredential(Account account) async {
     // API Key 类型的凭据通常不需要刷新，直接返回
-    final apiKey = account.credentials['api_key'];
-    if (apiKey == null || (apiKey as String).isEmpty) {
+    final credential = account.credential;
+    final apiKey = credential is ApiKeyCredential
+        ? credential.apiKey
+        : account.credentials['api_key'] as String?;
+    if (apiKey == null || apiKey.isEmpty) {
       throw CredentialExpiredException(account, '缺少 API Key');
     }
     return account;
@@ -60,8 +64,11 @@ abstract class ApiKeyCredentialProvider extends CredentialProvider {
 abstract class OAuth2CredentialProvider extends CredentialProvider {
   @override
   Future<Account> getCredential(Account account) async {
-    final accessToken = account.credentials['access_token'];
-    if (accessToken == null || (accessToken as String).isEmpty) {
+    final credential = account.credential;
+    final accessToken = credential is JwtCredential
+        ? credential.token
+        : account.credentials['access_token'] as String?;
+    if (accessToken == null || accessToken.isEmpty) {
       throw CredentialExpiredException(account, '缺少访问令牌');
     }
 
@@ -75,8 +82,11 @@ abstract class OAuth2CredentialProvider extends CredentialProvider {
 
   @override
   Future<Account> refreshCredential(Account account) async {
-    final refreshToken = account.credentials['refresh_token'];
-    if (refreshToken == null || (refreshToken as String).isEmpty) {
+    final cred = account.credential;
+    final refreshToken = cred is JwtCredential
+        ? cred.refreshToken
+        : account.credentials['refresh_token'] as String?;
+    if (refreshToken == null || refreshToken.isEmpty) {
       throw CredentialExpiredException(account, '缺少刷新令牌，请重新登录');
     }
 
@@ -85,22 +95,19 @@ abstract class OAuth2CredentialProvider extends CredentialProvider {
       final newTokenData = await requestTokenRefresh(refreshToken);
 
       // 更新账号中的凭据字段
-      final newCredentials = Map<String, dynamic>.from(account.credentials);
-      newCredentials['access_token'] = newTokenData['access_token'];
-
-      if (newTokenData.containsKey('expires_in')) {
-        final expiresIn = newTokenData['expires_in'] as int;
-        newCredentials['token_expiry'] = DateTime.now()
-            .add(Duration(seconds: expiresIn))
-            .toIso8601String();
-      }
-
-      if (newTokenData.containsKey('refresh_token')) {
-        newCredentials['refresh_token'] = newTokenData['refresh_token'];
-      }
-
-      newCredentials['credential_updated_at'] = DateTime.now()
-          .toIso8601String();
+      final expiresAt = newTokenData.containsKey('expires_in')
+          ? DateTime.now().add(
+              Duration(seconds: newTokenData['expires_in'] as int),
+            )
+          : null;
+      final newCredential = JwtCredential(
+        token: newTokenData['access_token'] as String,
+        refreshToken: (newTokenData['refresh_token'] as String?) ?? refreshToken,
+        expiresAt: expiresAt,
+      );
+      final newCredentials = newCredential.toJson();
+      newCredentials['credential_updated_at'] =
+          DateTime.now().toIso8601String();
 
       return Account(
         platformId: account.platformId,
@@ -117,21 +124,16 @@ abstract class OAuth2CredentialProvider extends CredentialProvider {
 
   /// 检查令牌是否过期
   bool _isTokenExpired(Account account) {
-    final tokenExpiry = account.credentials['token_expiry'];
-    if (tokenExpiry == null) return false;
-
-    final expiry = DateTime.parse(tokenExpiry as String);
-    return DateTime.now().isAfter(expiry);
+    final credential = account.credential;
+    if (credential.expiresAt == null) return false;
+    return credential.isExpired;
   }
 
   /// 检查令牌是否即将过期（5分钟内）
   bool _isTokenExpiringSoon(Account account) {
-    final tokenExpiry = account.credentials['token_expiry'];
-    if (tokenExpiry == null) return false;
-
-    final expiry = DateTime.parse(tokenExpiry as String);
-    final fiveMinutesFromNow = DateTime.now().add(const Duration(minutes: 5));
-    return fiveMinutesFromNow.isAfter(expiry);
+    final credential = account.credential;
+    if (credential.expiresAt == null) return false;
+    return credential.isExpiringSoon();
   }
 }
 
@@ -139,8 +141,8 @@ abstract class OAuth2CredentialProvider extends CredentialProvider {
 abstract class UserPasswordCredentialProvider extends CredentialProvider {
   @override
   Future<Account> getCredential(Account account) async {
-    final username = account.credentials['username'];
-    final password = account.credentials['password'];
+    final username = account.username;
+    final password = account.password;
 
     if (username == null || password == null) {
       throw CredentialExpiredException(account, '缺少用户名或密码');

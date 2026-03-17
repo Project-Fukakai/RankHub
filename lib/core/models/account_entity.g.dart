@@ -22,33 +22,38 @@ const AccountEntitySchema = CollectionSchema(
       name: r'accountIdentifier',
       type: IsarType.string,
     ),
-    r'createdAt': PropertySchema(
+    r'avatarUrl': PropertySchema(
       id: 1,
+      name: r'avatarUrl',
+      type: IsarType.string,
+    ),
+    r'createdAt': PropertySchema(
+      id: 2,
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
     r'credentialsJson': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'credentialsJson',
       type: IsarType.string,
     ),
     r'displayName': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'displayName',
       type: IsarType.string,
     ),
     r'metadataJson': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'metadataJson',
       type: IsarType.string,
     ),
     r'platformId': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'platformId',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
@@ -108,6 +113,12 @@ int _accountEntityEstimateSize(
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.accountIdentifier.length * 3;
+  {
+    final value = object.avatarUrl;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.credentialsJson.length * 3;
   bytesCount += 3 + object.displayName.length * 3;
   {
@@ -127,12 +138,13 @@ void _accountEntitySerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeString(offsets[0], object.accountIdentifier);
-  writer.writeDateTime(offsets[1], object.createdAt);
-  writer.writeString(offsets[2], object.credentialsJson);
-  writer.writeString(offsets[3], object.displayName);
-  writer.writeString(offsets[4], object.metadataJson);
-  writer.writeString(offsets[5], object.platformId);
-  writer.writeDateTime(offsets[6], object.updatedAt);
+  writer.writeString(offsets[1], object.avatarUrl);
+  writer.writeDateTime(offsets[2], object.createdAt);
+  writer.writeString(offsets[3], object.credentialsJson);
+  writer.writeString(offsets[4], object.displayName);
+  writer.writeString(offsets[5], object.metadataJson);
+  writer.writeString(offsets[6], object.platformId);
+  writer.writeDateTime(offsets[7], object.updatedAt);
 }
 
 AccountEntity _accountEntityDeserialize(
@@ -143,13 +155,14 @@ AccountEntity _accountEntityDeserialize(
 ) {
   final object = AccountEntity();
   object.accountIdentifier = reader.readString(offsets[0]);
-  object.createdAt = reader.readDateTime(offsets[1]);
-  object.credentialsJson = reader.readString(offsets[2]);
-  object.displayName = reader.readString(offsets[3]);
+  object.avatarUrl = reader.readStringOrNull(offsets[1]);
+  object.createdAt = reader.readDateTime(offsets[2]);
+  object.credentialsJson = reader.readString(offsets[3]);
+  object.displayName = reader.readString(offsets[4]);
   object.id = id;
-  object.metadataJson = reader.readStringOrNull(offsets[4]);
-  object.platformId = reader.readString(offsets[5]);
-  object.updatedAt = reader.readDateTime(offsets[6]);
+  object.metadataJson = reader.readStringOrNull(offsets[5]);
+  object.platformId = reader.readString(offsets[6]);
+  object.updatedAt = reader.readDateTime(offsets[7]);
   return object;
 }
 
@@ -163,16 +176,18 @@ P _accountEntityDeserializeProp<P>(
     case 0:
       return (reader.readString(offset)) as P;
     case 1:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 2:
-      return (reader.readString(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 3:
       return (reader.readString(offset)) as P;
     case 4:
-      return (reader.readStringOrNull(offset)) as P;
-    case 5:
       return (reader.readString(offset)) as P;
+    case 5:
+      return (reader.readStringOrNull(offset)) as P;
     case 6:
+      return (reader.readString(offset)) as P;
+    case 7:
       return (reader.readDateTime(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -728,6 +743,165 @@ extension AccountEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
         FilterCondition.greaterThan(property: r'accountIdentifier', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'avatarUrl'),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'avatarUrl'),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlEqualTo(String? value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'avatarUrl',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'avatarUrl',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'avatarUrl',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'avatarUrl',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'avatarUrl',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'avatarUrl',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'avatarUrl',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'avatarUrl',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'avatarUrl', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterFilterCondition>
+  avatarUrlIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'avatarUrl', value: ''),
       );
     });
   }
@@ -1504,6 +1678,19 @@ extension AccountEntityQuerySortBy
     });
   }
 
+  QueryBuilder<AccountEntity, AccountEntity, QAfterSortBy> sortByAvatarUrl() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'avatarUrl', Sort.asc);
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterSortBy>
+  sortByAvatarUrlDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'avatarUrl', Sort.desc);
+    });
+  }
+
   QueryBuilder<AccountEntity, AccountEntity, QAfterSortBy> sortByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
@@ -1598,6 +1785,19 @@ extension AccountEntityQuerySortThenBy
   thenByAccountIdentifierDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'accountIdentifier', Sort.desc);
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterSortBy> thenByAvatarUrl() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'avatarUrl', Sort.asc);
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterSortBy>
+  thenByAvatarUrlDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'avatarUrl', Sort.desc);
     });
   }
 
@@ -1706,6 +1906,14 @@ extension AccountEntityQueryWhereDistinct
     });
   }
 
+  QueryBuilder<AccountEntity, AccountEntity, QDistinct> distinctByAvatarUrl({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'avatarUrl', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<AccountEntity, AccountEntity, QDistinct> distinctByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAt');
@@ -1765,6 +1973,12 @@ extension AccountEntityQueryProperty
   accountIdentifierProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'accountIdentifier');
+    });
+  }
+
+  QueryBuilder<AccountEntity, String?, QQueryOperations> avatarUrlProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'avatarUrl');
     });
   }
 

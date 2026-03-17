@@ -17,79 +17,93 @@ const PhigrosSongSchema = CollectionSchema(
   name: r'PhigrosSong',
   id: 1471599697308266898,
   properties: {
+    r'bpm': PropertySchema(id: 0, name: r'bpm', type: IsarType.string),
+    r'chapter': PropertySchema(id: 1, name: r'chapter', type: IsarType.string),
     r'chartDesignerAT': PropertySchema(
-      id: 0,
+      id: 2,
       name: r'chartDesignerAT',
       type: IsarType.string,
     ),
     r'chartDesignerEZ': PropertySchema(
-      id: 1,
+      id: 3,
       name: r'chartDesignerEZ',
       type: IsarType.string,
     ),
     r'chartDesignerHD': PropertySchema(
-      id: 2,
+      id: 4,
       name: r'chartDesignerHD',
       type: IsarType.string,
     ),
     r'chartDesignerIN': PropertySchema(
-      id: 3,
+      id: 5,
       name: r'chartDesignerIN',
       type: IsarType.string,
     ),
     r'collection': PropertySchema(
-      id: 4,
+      id: 6,
       name: r'collection',
       type: IsarType.string,
     ),
     r'composer': PropertySchema(
-      id: 5,
+      id: 7,
       name: r'composer',
       type: IsarType.string,
     ),
     r'difficultyAT': PropertySchema(
-      id: 6,
+      id: 8,
       name: r'difficultyAT',
       type: IsarType.double,
     ),
     r'difficultyEZ': PropertySchema(
-      id: 7,
+      id: 9,
       name: r'difficultyEZ',
       type: IsarType.double,
     ),
     r'difficultyHD': PropertySchema(
-      id: 8,
+      id: 10,
       name: r'difficultyHD',
       type: IsarType.double,
     ),
     r'difficultyIN': PropertySchema(
-      id: 9,
+      id: 11,
       name: r'difficultyIN',
       type: IsarType.double,
     ),
-    r'hasAT': PropertySchema(id: 10, name: r'hasAT', type: IsarType.bool),
+    r'hasAT': PropertySchema(id: 12, name: r'hasAT', type: IsarType.bool),
     r'illustrationBlurUrl': PropertySchema(
-      id: 11,
+      id: 13,
       name: r'illustrationBlurUrl',
       type: IsarType.string,
     ),
     r'illustrationLowResUrl': PropertySchema(
-      id: 12,
+      id: 14,
       name: r'illustrationLowResUrl',
       type: IsarType.string,
     ),
     r'illustrationUrl': PropertySchema(
-      id: 13,
+      id: 15,
       name: r'illustrationUrl',
       type: IsarType.string,
     ),
     r'illustrator': PropertySchema(
-      id: 14,
+      id: 16,
       name: r'illustrator',
       type: IsarType.string,
     ),
-    r'name': PropertySchema(id: 15, name: r'name', type: IsarType.string),
-    r'songId': PropertySchema(id: 16, name: r'songId', type: IsarType.string),
+    r'length': PropertySchema(id: 17, name: r'length', type: IsarType.string),
+    r'name': PropertySchema(id: 18, name: r'name', type: IsarType.string),
+    r'previewEndTime': PropertySchema(
+      id: 19,
+      name: r'previewEndTime',
+      type: IsarType.double,
+    ),
+    r'previewTime': PropertySchema(
+      id: 20,
+      name: r'previewTime',
+      type: IsarType.double,
+    ),
+    r'songId': PropertySchema(id: 21, name: r'songId', type: IsarType.string),
+    r'songKey': PropertySchema(id: 22, name: r'songKey', type: IsarType.string),
   },
 
   estimateSize: _phigrosSongEstimateSize,
@@ -127,6 +141,18 @@ int _phigrosSongEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
+  {
+    final value = object.bpm;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.chapter;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   {
     final value = object.chartDesignerAT;
     if (value != null) {
@@ -167,8 +193,20 @@ int _phigrosSongEstimateSize(
       bytesCount += 3 + value.length * 3;
     }
   }
+  {
+    final value = object.length;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.name.length * 3;
   bytesCount += 3 + object.songId.length * 3;
+  {
+    final value = object.songKey;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   return bytesCount;
 }
 
@@ -178,23 +216,29 @@ void _phigrosSongSerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.chartDesignerAT);
-  writer.writeString(offsets[1], object.chartDesignerEZ);
-  writer.writeString(offsets[2], object.chartDesignerHD);
-  writer.writeString(offsets[3], object.chartDesignerIN);
-  writer.writeString(offsets[4], object.collection);
-  writer.writeString(offsets[5], object.composer);
-  writer.writeDouble(offsets[6], object.difficultyAT);
-  writer.writeDouble(offsets[7], object.difficultyEZ);
-  writer.writeDouble(offsets[8], object.difficultyHD);
-  writer.writeDouble(offsets[9], object.difficultyIN);
-  writer.writeBool(offsets[10], object.hasAT);
-  writer.writeString(offsets[11], object.illustrationBlurUrl);
-  writer.writeString(offsets[12], object.illustrationLowResUrl);
-  writer.writeString(offsets[13], object.illustrationUrl);
-  writer.writeString(offsets[14], object.illustrator);
-  writer.writeString(offsets[15], object.name);
-  writer.writeString(offsets[16], object.songId);
+  writer.writeString(offsets[0], object.bpm);
+  writer.writeString(offsets[1], object.chapter);
+  writer.writeString(offsets[2], object.chartDesignerAT);
+  writer.writeString(offsets[3], object.chartDesignerEZ);
+  writer.writeString(offsets[4], object.chartDesignerHD);
+  writer.writeString(offsets[5], object.chartDesignerIN);
+  writer.writeString(offsets[6], object.collection);
+  writer.writeString(offsets[7], object.composer);
+  writer.writeDouble(offsets[8], object.difficultyAT);
+  writer.writeDouble(offsets[9], object.difficultyEZ);
+  writer.writeDouble(offsets[10], object.difficultyHD);
+  writer.writeDouble(offsets[11], object.difficultyIN);
+  writer.writeBool(offsets[12], object.hasAT);
+  writer.writeString(offsets[13], object.illustrationBlurUrl);
+  writer.writeString(offsets[14], object.illustrationLowResUrl);
+  writer.writeString(offsets[15], object.illustrationUrl);
+  writer.writeString(offsets[16], object.illustrator);
+  writer.writeString(offsets[17], object.length);
+  writer.writeString(offsets[18], object.name);
+  writer.writeDouble(offsets[19], object.previewEndTime);
+  writer.writeDouble(offsets[20], object.previewTime);
+  writer.writeString(offsets[21], object.songId);
+  writer.writeString(offsets[22], object.songKey);
 }
 
 PhigrosSong _phigrosSongDeserialize(
@@ -204,20 +248,26 @@ PhigrosSong _phigrosSongDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = PhigrosSong();
-  object.chartDesignerAT = reader.readStringOrNull(offsets[0]);
-  object.chartDesignerEZ = reader.readStringOrNull(offsets[1]);
-  object.chartDesignerHD = reader.readStringOrNull(offsets[2]);
-  object.chartDesignerIN = reader.readStringOrNull(offsets[3]);
-  object.collection = reader.readStringOrNull(offsets[4]);
-  object.composer = reader.readString(offsets[5]);
-  object.difficultyAT = reader.readDoubleOrNull(offsets[6]);
-  object.difficultyEZ = reader.readDoubleOrNull(offsets[7]);
-  object.difficultyHD = reader.readDoubleOrNull(offsets[8]);
-  object.difficultyIN = reader.readDoubleOrNull(offsets[9]);
+  object.bpm = reader.readStringOrNull(offsets[0]);
+  object.chapter = reader.readStringOrNull(offsets[1]);
+  object.chartDesignerAT = reader.readStringOrNull(offsets[2]);
+  object.chartDesignerEZ = reader.readStringOrNull(offsets[3]);
+  object.chartDesignerHD = reader.readStringOrNull(offsets[4]);
+  object.chartDesignerIN = reader.readStringOrNull(offsets[5]);
+  object.collection = reader.readStringOrNull(offsets[6]);
+  object.composer = reader.readString(offsets[7]);
+  object.difficultyAT = reader.readDoubleOrNull(offsets[8]);
+  object.difficultyEZ = reader.readDoubleOrNull(offsets[9]);
+  object.difficultyHD = reader.readDoubleOrNull(offsets[10]);
+  object.difficultyIN = reader.readDoubleOrNull(offsets[11]);
   object.id = id;
-  object.illustrator = reader.readStringOrNull(offsets[14]);
-  object.name = reader.readString(offsets[15]);
-  object.songId = reader.readString(offsets[16]);
+  object.illustrator = reader.readStringOrNull(offsets[16]);
+  object.length = reader.readStringOrNull(offsets[17]);
+  object.name = reader.readString(offsets[18]);
+  object.previewEndTime = reader.readDoubleOrNull(offsets[19]);
+  object.previewTime = reader.readDoubleOrNull(offsets[20]);
+  object.songId = reader.readString(offsets[21]);
+  object.songKey = reader.readStringOrNull(offsets[22]);
   return object;
 }
 
@@ -239,29 +289,41 @@ P _phigrosSongDeserializeProp<P>(
     case 4:
       return (reader.readStringOrNull(offset)) as P;
     case 5:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 6:
-      return (reader.readDoubleOrNull(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 7:
-      return (reader.readDoubleOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 8:
       return (reader.readDoubleOrNull(offset)) as P;
     case 9:
       return (reader.readDoubleOrNull(offset)) as P;
     case 10:
-      return (reader.readBool(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 11:
-      return (reader.readString(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 12:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 13:
       return (reader.readString(offset)) as P;
     case 14:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 15:
       return (reader.readString(offset)) as P;
     case 16:
+      return (reader.readStringOrNull(offset)) as P;
+    case 17:
+      return (reader.readStringOrNull(offset)) as P;
+    case 18:
       return (reader.readString(offset)) as P;
+    case 19:
+      return (reader.readDoubleOrNull(offset)) as P;
+    case 20:
+      return (reader.readDoubleOrNull(offset)) as P;
+    case 21:
+      return (reader.readString(offset)) as P;
+    case 22:
+      return (reader.readStringOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
@@ -478,6 +540,334 @@ extension PhigrosSongQueryWhere
 
 extension PhigrosSongQueryFilter
     on QueryBuilder<PhigrosSong, PhigrosSong, QFilterCondition> {
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'bpm'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'bpm'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'bpm',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'bpm',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'bpm',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'bpm',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'bpm',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'bpm',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmContains(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'bpm',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmMatches(
+    String pattern, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'bpm',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> bpmIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'bpm', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  bpmIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'bpm', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  chapterIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'chapter'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  chapterIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'chapter'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> chapterEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'chapter',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  chapterGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'chapter',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> chapterLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'chapter',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> chapterBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'chapter',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  chapterStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'chapter',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> chapterEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'chapter',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> chapterContains(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'chapter',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> chapterMatches(
+    String pattern, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'chapter',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  chapterIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'chapter', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  chapterIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'chapter', value: ''),
+      );
+    });
+  }
+
   QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
   chartDesignerATIsNull() {
     return QueryBuilder.apply(this, (query) {
@@ -2446,6 +2836,170 @@ extension PhigrosSongQueryFilter
     });
   }
 
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> lengthIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'length'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  lengthIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'length'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> lengthEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'length',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  lengthGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'length',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> lengthLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'length',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> lengthBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'length',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  lengthStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'length',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> lengthEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'length',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> lengthContains(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'length',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> lengthMatches(
+    String pattern, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'length',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  lengthIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'length', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  lengthIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'length', value: ''),
+      );
+    });
+  }
+
   QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> nameEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -2589,6 +3143,192 @@ extension PhigrosSongQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
         FilterCondition.greaterThan(property: r'name', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewEndTimeIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'previewEndTime'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewEndTimeIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'previewEndTime'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewEndTimeEqualTo(double? value, {double epsilon = Query.epsilon}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'previewEndTime',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewEndTimeGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'previewEndTime',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewEndTimeLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'previewEndTime',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewEndTimeBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'previewEndTime',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewTimeIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'previewTime'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewTimeIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'previewTime'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewTimeEqualTo(double? value, {double epsilon = Query.epsilon}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'previewTime',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewTimeGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'previewTime',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewTimeLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'previewTime',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  previewTimeBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'previewTime',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+
+          epsilon: epsilon,
+        ),
       );
     });
   }
@@ -2739,6 +3479,171 @@ extension PhigrosSongQueryFilter
       );
     });
   }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  songKeyIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'songKey'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  songKeyIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'songKey'),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> songKeyEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'songKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  songKeyGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'songKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> songKeyLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'songKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> songKeyBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'songKey',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  songKeyStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'songKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> songKeyEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'songKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> songKeyContains(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'songKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition> songKeyMatches(
+    String pattern, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'songKey',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  songKeyIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'songKey', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterFilterCondition>
+  songKeyIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'songKey', value: ''),
+      );
+    });
+  }
 }
 
 extension PhigrosSongQueryObject
@@ -2749,6 +3654,30 @@ extension PhigrosSongQueryLinks
 
 extension PhigrosSongQuerySortBy
     on QueryBuilder<PhigrosSong, PhigrosSong, QSortBy> {
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByBpm() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bpm', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByBpmDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bpm', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByChapter() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'chapter', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByChapterDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'chapter', Sort.desc);
+    });
+  }
+
   QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByChartDesignerAT() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'chartDesignerAT', Sort.asc);
@@ -2942,6 +3871,18 @@ extension PhigrosSongQuerySortBy
     });
   }
 
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByLength() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'length', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByLengthDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'length', Sort.desc);
+    });
+  }
+
   QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
@@ -2951,6 +3892,31 @@ extension PhigrosSongQuerySortBy
   QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByPreviewEndTime() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'previewEndTime', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy>
+  sortByPreviewEndTimeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'previewEndTime', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByPreviewTime() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'previewTime', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortByPreviewTimeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'previewTime', Sort.desc);
     });
   }
 
@@ -2965,10 +3931,46 @@ extension PhigrosSongQuerySortBy
       return query.addSortBy(r'songId', Sort.desc);
     });
   }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortBySongKey() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'songKey', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> sortBySongKeyDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'songKey', Sort.desc);
+    });
+  }
 }
 
 extension PhigrosSongQuerySortThenBy
     on QueryBuilder<PhigrosSong, PhigrosSong, QSortThenBy> {
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByBpm() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bpm', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByBpmDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bpm', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByChapter() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'chapter', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByChapterDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'chapter', Sort.desc);
+    });
+  }
+
   QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByChartDesignerAT() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'chartDesignerAT', Sort.asc);
@@ -3174,6 +4176,18 @@ extension PhigrosSongQuerySortThenBy
     });
   }
 
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByLength() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'length', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByLengthDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'length', Sort.desc);
+    });
+  }
+
   QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
@@ -3183,6 +4197,31 @@ extension PhigrosSongQuerySortThenBy
   QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByPreviewEndTime() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'previewEndTime', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy>
+  thenByPreviewEndTimeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'previewEndTime', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByPreviewTime() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'previewTime', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenByPreviewTimeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'previewTime', Sort.desc);
     });
   }
 
@@ -3197,10 +4236,38 @@ extension PhigrosSongQuerySortThenBy
       return query.addSortBy(r'songId', Sort.desc);
     });
   }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenBySongKey() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'songKey', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QAfterSortBy> thenBySongKeyDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'songKey', Sort.desc);
+    });
+  }
 }
 
 extension PhigrosSongQueryWhereDistinct
     on QueryBuilder<PhigrosSong, PhigrosSong, QDistinct> {
+  QueryBuilder<PhigrosSong, PhigrosSong, QDistinct> distinctByBpm({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'bpm', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QDistinct> distinctByChapter({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'chapter', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<PhigrosSong, PhigrosSong, QDistinct> distinctByChartDesignerAT({
     bool caseSensitive = true,
   }) {
@@ -3330,11 +4397,31 @@ extension PhigrosSongQueryWhereDistinct
     });
   }
 
+  QueryBuilder<PhigrosSong, PhigrosSong, QDistinct> distinctByLength({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'length', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<PhigrosSong, PhigrosSong, QDistinct> distinctByName({
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'name', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QDistinct> distinctByPreviewEndTime() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'previewEndTime');
+    });
+  }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QDistinct> distinctByPreviewTime() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'previewTime');
     });
   }
 
@@ -3345,6 +4432,14 @@ extension PhigrosSongQueryWhereDistinct
       return query.addDistinctBy(r'songId', caseSensitive: caseSensitive);
     });
   }
+
+  QueryBuilder<PhigrosSong, PhigrosSong, QDistinct> distinctBySongKey({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'songKey', caseSensitive: caseSensitive);
+    });
+  }
 }
 
 extension PhigrosSongQueryProperty
@@ -3352,6 +4447,18 @@ extension PhigrosSongQueryProperty
   QueryBuilder<PhigrosSong, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<PhigrosSong, String?, QQueryOperations> bpmProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'bpm');
+    });
+  }
+
+  QueryBuilder<PhigrosSong, String?, QQueryOperations> chapterProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'chapter');
     });
   }
 
@@ -3452,15 +4559,40 @@ extension PhigrosSongQueryProperty
     });
   }
 
+  QueryBuilder<PhigrosSong, String?, QQueryOperations> lengthProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'length');
+    });
+  }
+
   QueryBuilder<PhigrosSong, String, QQueryOperations> nameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'name');
     });
   }
 
+  QueryBuilder<PhigrosSong, double?, QQueryOperations>
+  previewEndTimeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'previewEndTime');
+    });
+  }
+
+  QueryBuilder<PhigrosSong, double?, QQueryOperations> previewTimeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'previewTime');
+    });
+  }
+
   QueryBuilder<PhigrosSong, String, QQueryOperations> songIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'songId');
+    });
+  }
+
+  QueryBuilder<PhigrosSong, String?, QQueryOperations> songKeyProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'songKey');
     });
   }
 }
