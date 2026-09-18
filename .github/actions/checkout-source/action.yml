@@ -192,23 +192,33 @@ runs:
         resolved=""
         resolved_type=""
 
-        if [ "${TARGET_REF_TYPE}" != "tag" ]; then
-          resolved="$(git ls-remote --exit-code "${CODEUP_REPO}" "refs/heads/${TARGET_REF}" 2>/dev/null | cut -f1 || true)"
-          [ -n "${resolved}" ] && resolved_type="branch"
-        fi
-
-        if [ -z "${resolved}" ] && [ "${TARGET_REF_TYPE}" != "branch" ]; then
-          # annotated tag 的 ref 指向 tag 对象，必须用 ^{} 解引用到 commit。
-          # 轻量 tag 两种写法给同一个 SHA，取到即对。
-          resolved="$(git ls-remote --exit-code "${CODEUP_REPO}" "refs/tags/${TARGET_REF}^{}" 2>/dev/null | cut -f1 || true)"
-          if [ -z "${resolved}" ]; then
-            resolved="$(git ls-remote --exit-code "${CODEUP_REPO}" "refs/tags/${TARGET_REF}" 2>/dev/null | cut -f1 || true)"
+        # ❗ 允许直接传 **40 位 commit SHA**：下游 job 就是用
+        #   `ref: ${{ needs.resolve.outputs.commit }}` 把上游解析好的不可变 commit 传下来的 ——
+        #   那是最严格的一种用法（连 ref→SHA 的窗口都没有）。若坚持只认分支/tag 名，
+        #   那些 job 会因为「找不到名为 <sha> 的分支」而失败（首跑实测就是这个）。
+        if printf '%s' "${TARGET_REF}" | grep -qE '^[0-9a-f]{40}$'; then
+          resolved="${TARGET_REF}"
+          resolved_type="commit"
+          echo "[checkout-source] 入参就是 commit SHA，直接采用：${resolved}"
+        else
+          if [ "${TARGET_REF_TYPE}" != "tag" ]; then
+            resolved="$(git ls-remote --exit-code "${CODEUP_REPO}" "refs/heads/${TARGET_REF}" 2>/dev/null | cut -f1 || true)"
+            [ -n "${resolved}" ] && resolved_type="branch"
           fi
-          [ -n "${resolved}" ] && resolved_type="tag"
+
+          if [ -z "${resolved}" ] && [ "${TARGET_REF_TYPE}" != "branch" ]; then
+            # annotated tag 的 ref 指向 tag 对象，必须用 ^{} 解引用到 commit。
+            # 轻量 tag 两种写法给同一个 SHA，取到即对。
+            resolved="$(git ls-remote --exit-code "${CODEUP_REPO}" "refs/tags/${TARGET_REF}^{}" 2>/dev/null | cut -f1 || true)"
+            if [ -z "${resolved}" ]; then
+              resolved="$(git ls-remote --exit-code "${CODEUP_REPO}" "refs/tags/${TARGET_REF}" 2>/dev/null | cut -f1 || true)"
+            fi
+            [ -n "${resolved}" ] && resolved_type="tag"
+          fi
         fi
 
         if [ -z "${resolved}" ]; then
-          echo "::error::在 Codeup 找不到分支或 tag '${TARGET_REF}'（只按分支名 / tag 名解析，不接受任意 commit）"
+          echo "::error::在 Codeup 找不到 '${TARGET_REF}' —— 接受分支名 / tag 名 / 40 位 commit SHA"
           exit 1
         fi
 
@@ -299,20 +309,21 @@ runs:
         #    下游一切 `git fetch origin` / `origin/main` 的语义都随之确定。
         git remote add origin "${CODEUP_REPO}"
 
-        # 先按非浅方式取目标 commit 与其祖先 —— 已存在时是廉价的 no-op。
-        # 若目标 commit 在默认分支上（release/main 的常态），--depth 取法也成立；这里直接
-        # 用非浅取法，把「第一跑成功」放在「省流量」前面。
-        if ! git fetch -q origin "${TARGET_COMMIT}" 2>&1; then
-          echo "::error::git fetch ${TARGET_COMMIT} 失败 —— 取码链路有问题（key / known_hosts / 仓库路径）"
-          exit 1
-        fi
-
+        # 取目标 commit。两种情况：
+        #   * 只要这一个 commit（构建路径）→ 直接按 SHA 取，最省。
+        #   * 需要完整历史（发布/门禁）→ 把全部 ref 与 tag 拉回来。`git describe --tags`
+        #     （变更检测基线）与 `git merge-base`（契约门禁分流）都依赖它们，
+        #     缺了会静默退化成全量构建（带 tag 的提交所覆盖的历史会随 tag 一起被拉到）。
         if [ "${FETCH_FULL_HISTORY}" = "true" ]; then
-          # ❗ 变更检测的基线是 `git describe --tags` 的最近发布 tag，契约门禁靠 `git merge-base`。
-          #    所以这条路径必须把**全部 tag 与祖先链**都取回来，否则两者都会静默退化
-          #   （云效版 cloneDepth: 0 是同一条理由）。
-          if ! git fetch -q --tags origin '+refs/heads/*:refs/remotes/origin/*' 2>&1; then
-            echo "::warning::取全部分支/tag 失败 —— 变更检测可能退化为全量构建（安全侧），但不该静默发生"
+          if ! git fetch -q --tags origin \
+            '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*' 2>&1; then
+            echo "::error::拉取全部 ref/tag 失败 —— 变更检测与分流都依赖它们，不能继续"
+            exit 1
+          fi
+        else
+          if ! git fetch -q origin "${TARGET_COMMIT}" 2>&1; then
+            echo "::error::git fetch ${TARGET_COMMIT} 失败 —— 取码链路有问题（key / known_hosts / 仓库路径）"
+            exit 1
           fi
         fi
 
