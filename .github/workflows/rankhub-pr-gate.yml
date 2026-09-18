@@ -165,8 +165,15 @@ jobs:
           PR_GATE_BASE_REF: ${{ env.BASELINE_REF }}
         run: |
           set -euo pipefail
-          # 刻意**不**在这里 pnpm install：pr-gate-contract.sh 自己按需装 ——
-          # 指纹快路径 / 双侧都跳过时，本次 job 连 install（约 25s）都不用付。
+          # ❗ install 必需，两条理由：
+          #   ① 当前 main 上的 scripts/ci/pr-gate-contract.sh **不会自己装依赖**（它直接
+          #      `pnpm --filter … nestia:*`，全新克隆里 node_modules 不存在 →
+          #      `tspc: not found` / `Cannot find module '@nestia/core/lib/transform'`；
+          #      run 35315880650 实测）。
+          #   ② 仓库里正在改的那版脚本会按需自装（指纹快路径时能省掉这 25s）。等多之后这条
+          #      就是冗余的 —— 但冗余无害（frozen-lockfile 幂等），漏了却是**每次都红**。
+          # 宁可多花 25s，也不要让门禁因为「依赖没装」而不可信。
+          pnpm install --frozen-lockfile
           bash scripts/ci/pr-gate-contract.sh
 
   # ──────────────────────────────────────────────────── ③ 静态护栏
