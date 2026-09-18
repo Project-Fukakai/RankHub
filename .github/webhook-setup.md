@@ -130,6 +130,32 @@ https://api.github.com/repos/Project-Fukakai/RankHub/dispatches
 
 ## 3. 已知风险与首次跑的观察点
 
+### 3.0 首次落地的实测记录（2026-09-18）
+
+门禁链路已跑通，各段耗时（GitHub 托管 runner）：
+
+| 段 | 耗时 | 备注 |
+| --- | --- | --- |
+| `resolve`（取码 + 解析 commit） | 17~32s | 含 `git ls-remote` 探测与完整 clone |
+| `静态护栏` | 17s | 与云效 `MEDIUM_2C4G` 同量级 |
+| `契约同步`（分层） | ~5.5 分钟 | 含 `pnpm install` 25s；CI 克隆里没有 `contract-stamp.json`，走不了指纹快路径，每次都全量 |
+| `lint / test:unit` | ~2 分钟 | lint 约 50s，其余是 vitest |
+
+调试期踩到并已修掉的四个坑（都写进了对应文件的注释）：
+
+1. **`actions/checkout` 只能检出同平台仓库** —— 对 Codeup 路径，传 URL 报
+   `Invalid repository … Expected format {owner}/{repo}`，传 `owner/repo` 它也认证不了。
+   所以检出是 `checkout-source` 自己跑的 `git init/fetch/switch`。
+2. **`resolve` 必须接受 40 位 commit SHA** —— 下游 job 传的就是上游解析好的不可变 SHA。
+3. **注释里的 `${{ … }}` 也会被求值** —— 在 action 注释里写示例表达式会让 action 直接加载失败
+   （composite action 里没有 `needs` 上下文）。
+4. **契约 job 必须自己 `pnpm install`** —— 当前 main 上的脚本不自装依赖。
+
+> ⚠️ 已知**代码侧**红项：`apps/backend/tests/unit/maimai-profiles.test.ts` 的 `upload_time`
+> 断言依赖机器时区（开发机 CST 过、UTC runner 红）。修法是给 backend 的 `test*` 脚本钉
+> `TZ=Asia/Shanghai`（Codeup 侧改动）。在它合入前 `lint / test:unit` 会一直红 —— 那是真实信号，
+> 别当成门禁故障。
+
 ### 3.1 跨境推镜像（本次迁移的最大风险，文档 §0.1 记过）
 
 GitHub 托管 runner 在境外，镜像要跨境推到腾讯云 TCR。这是当初从 GHA 迁到云效的**核心原因**。
