@@ -39,8 +39,10 @@ jobs:
           set -euo pipefail
           # 允许的根条目：.github 本体 + 仓库门面（GitHub 首页展示用）。
           # ❗ 不是「什么都允许」：源码目录、Dockerfile、package.json、构建产物一旦出现就是错误。
+          # ❗ 必须排除 .git —— actions/checkout 会在工作区建它，漏掉就是门禁自己的假红（首跑实测）。
           strays="$(find . -mindepth 1 -maxdepth 1 \
-            -not -name '.github' -not -name 'README.md' -not -name 'LICENSE' -not -name 'LICENSE.md' \
+            -not -name '.github' -not -name '.git' \
+            -not -name 'README.md' -not -name 'LICENSE' -not -name 'LICENSE.md' \
             | sort)"
           if [ -n "${strays}" ]; then
             echo "::error::仓库根出现了不允许的条目 —— 本仓库只放 workflow（构建定义在 Codeup）："
