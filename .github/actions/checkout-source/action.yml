@@ -69,9 +69,11 @@ outputs:
     value: ${{ steps.resolve.outputs.default_branch }}
   repository-path:
     description: >-
-      `owner/repo` 形式的仓库标识。**actions/checkout 只接受这个形状**，不接受 SSH/HTTPS URL
-      （传 URL 会被判 `Invalid repository … Expected format {owner}/{repo}`，首跑实测）；
-      而 `git ls-remote` / `git fetch` 要的是完整 URL。同一个 input 喂两个消费方，必须分开。
+      `owner/repo` 形式的仓库标识（诊断/日志用）。
+      ⚠️ 曾经想把它喂给 actions/checkout，但**那条路是死的**：checkout 只认同平台
+      （GitHub）的仓库，对 Codeup 路径既认证不了也用不了 URL（首跑两种写法都实测报
+      `Invalid repository`）。所以检出改由本 action 自己跑 git（见 step `clone`），
+      这个输出只剩「让人一眼看出解析对了没有」的作用。
     value: ${{ steps.resolve.outputs.repository_path }}
   ssh-dir:
     description: >-
@@ -259,21 +261,67 @@ runs:
         echo "[checkout-source] ref=${TARGET_REF} type=${resolved_type} commit=${resolved} short=${resolved:0:8} default=${default_branch}"
 
     # —— ② 检出：钉在第 ① 步解析出的 commit 上，杜绝「解析到构建之间分支又动了」 ——
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        # ❗ 这里必须是 owner/repo：actions/checkout 不接受 SSH URL（见 outputs.repository-path）
-        repository: ${{ steps.resolve.outputs.repository_path }}
-        ref: ${{ steps.resolve.outputs.commit }}
-        path: ${{ inputs.path }}
-        fetch-depth: ${{ inputs.fetch-full-history == 'true' && 0 || 1 }}
-        fetch-tags: ${{ inputs.fetch-full-history }}
-        ssh-key: ${{ inputs.ssh-key }}
-        ssh-known-hosts: ${{ inputs.ssh-known-hosts }}
-        # 显式写出来（默认就是 git）：Codeup 的 SSH 用户固定是 git，写死免得将来被"优化"掉。
-        ssh-user: git
-        # 取码凭据只用于读：不持久化到 git config，后续步骤拿不到它。
-        #（fetch-baseline 因此要让 checkout-source 把 ssh-dir 传下去 —— 见其 inputs.ssh-dir）
-        persist-credentials: false
+    #
+    # ❗ **不用 actions/checkout**：它只认**同平台**（GitHub）的 `{owner}/{repo}` ——
+    #    对 `stcn/RankHub/RankHub-NET` 这种 Codeup 路径，它既无法认证（不会用我们的 deploy key，
+    #    默认拿 GITHUB_TOKEN 去打 github.com），也用不了完整 URL（传 URL 直接判 `Invalid repository`）。
+    #    首跑实测：传 URL → "Invalid repository … Expected format {owner}/{repo}"；
+    #    传 owner/repo → 同样报错（它按 GitHub 去解析 `stcn`）。所以这里自己跑 git。
+    - id: clone
+      name: clone Codeup 源
+      shell: bash
+      env:
+        CODEUP_REPO: ${{ inputs.repository }}
+        TARGET_COMMIT: ${{ steps.resolve.outputs.commit }}
+        DEST_DIR: ${{ github.workspace }}/${{ inputs.path }}
+        FETCH_FULL_HISTORY: ${{ inputs.fetch-full-history }}
+        SSH_DIR: ${{ steps.resolve.outputs.ssh_dir }}
+      run: |
+        set -euo pipefail
+
+        mkdir -p "$(dirname "${DEST_DIR}")"
+
+        # 与 ① 同一把 key、同一份 known_hosts（同一个 ssh_dir，所以不会漂）。
+        export GIT_SSH_COMMAND="ssh -i ${SSH_DIR}/codeup_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${SSH_DIR}/known_hosts"
+        # 任何 prompt 都不许出现：CI 上挂住比失败更难排查。
+        export GIT_TERMINAL_PROMPT=0
+        # 不要凭据助手（clone 失败时 stderr 会被原样贴进日志）。
+        # 用最标准的两条设置，不用 GIT_CONFIG_PARAMETERS 那种脆弱的环境变量写法。
+        git config --global --unset-all credential.helper >/dev/null 2>&1 || true
+        git config --global credential.helper ''
+
+        rm -rf "${DEST_DIR}"
+        mkdir -p "${DEST_DIR}"
+        cd "${DEST_DIR}"
+        git init -q .
+
+        # ❗ 显式写 remote URL（不是 `git remote add origin` 的简写）—— 让 origin 明确指向 Codeup，
+        #    下游一切 `git fetch origin` / `origin/main` 的语义都随之确定。
+        git remote add origin "${CODEUP_REPO}"
+
+        # 先按非浅方式取目标 commit 与其祖先 —— 已存在时是廉价的 no-op。
+        # 若目标 commit 在默认分支上（release/main 的常态），--depth 取法也成立；这里直接
+        # 用非浅取法，把「第一跑成功」放在「省流量」前面。
+        if ! git fetch -q origin "${TARGET_COMMIT}" 2>&1; then
+          echo "::error::git fetch ${TARGET_COMMIT} 失败 —— 取码链路有问题（key / known_hosts / 仓库路径）"
+          exit 1
+        fi
+
+        if [ "${FETCH_FULL_HISTORY}" = "true" ]; then
+          # ❗ 变更检测的基线是 `git describe --tags` 的最近发布 tag，契约门禁靠 `git merge-base`。
+          #    所以这条路径必须把**全部 tag 与祖先链**都取回来，否则两者都会静默退化
+          #   （云效版 cloneDepth: 0 是同一条理由）。
+          if ! git fetch -q --tags origin '+refs/heads/*:refs/remotes/origin/*' 2>&1; then
+            echo "::warning::取全部分支/tag 失败 —— 变更检测可能退化为全量构建（安全侧），但不该静默发生"
+          fi
+        fi
+
+        # 用 git switch 而不是 checkout：能明确「不建本地分支、就是 detached HEAD」，
+        # 不会出现「落在 main 上但预期是 detached」这种模糊状态。
+        git switch -q --detach "${TARGET_COMMIT}"
+
+        echo "[checkout-source] 已 clone ${CODEUP_REPO} → ${DEST_DIR}"
+        echo "[checkout-source] HEAD=$(git rev-parse HEAD)  tags=$(git tag --list | wc -l | tr -d ' ')"
 
     - name: sanity check
       shell: bash
@@ -281,6 +329,7 @@ runs:
       env:
         EXPECTED_COMMIT: ${{ steps.resolve.outputs.commit }}
         DEFAULT_BRANCH: ${{ steps.resolve.outputs.default_branch }}
+        FETCH_FULL_HISTORY: ${{ inputs.fetch-full-history }}
       run: |
         set -euo pipefail
         actual="$(git rev-parse HEAD)"
@@ -288,9 +337,21 @@ runs:
           echo "::error::检出到的 HEAD (${actual}) 与解析出的 commit (${EXPECTED_COMMIT}) 不一致 —— 取码不可信，拒绝继续"
           exit 1
         fi
-        # 契约门禁依赖 origin/<default>：actions/checkout 会建 remote refs，
-        # 但显式断言一次，免得「基线悄悄没了 → 分流退化」这种安静失效。
+
+        # 契约门禁依赖 origin/<default>：显式断言，免得「基线悄悄没了 → 分流退化」这种安静失效。
         if ! git rev-parse --verify --quiet "origin/${DEFAULT_BRANCH}" >/dev/null; then
           echo "::warning::origin/${DEFAULT_BRANCH} 不存在 —— 依赖 merge-base 的分流会退化为全量（安全侧）"
         fi
+
+        # 需要完整历史时，明确检查 tag 真的取到了 —— 「找不到发布 tag 基线」在
+        # plan-release.sh 里会退化为全量构建（安全侧），但那会让每次发布都变慢，
+        # 而且没人会注意到。所以在这里就说清楚。
+        if [ "${FETCH_FULL_HISTORY}" = "true" ]; then
+          tag_count="$(git tag --list | wc -l | tr -d ' ')"
+          echo "[checkout-source] 本地 tag 数：${tag_count}"
+          if [ "${tag_count}" = "0" ]; then
+            echo "::warning::一个 tag 都没取到 —— 变更检测会退化。检查 deploy key 对 refs/tags 的读权限，或 clone 时是否漏了 --tags"
+          fi
+        fi
+
         echo "[checkout-source] OK：工作树 $(pwd) @ ${actual}"
