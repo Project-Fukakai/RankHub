@@ -534,7 +534,14 @@ jobs:
         working-directory: codeup
         env:
           SOURCE_SHORT_SHA: ${{ needs.resolve.outputs.short_sha }}
-          GROUPS: ${{ needs.plan.outputs.groups }}
+          # ❗ 变量名**必须**是 BUILD_GROUPS，不能叫 GROUPS —— 后者是 bash 的**内置只读数组**
+          #   （当前用户的组 ID）。赋值会被 bash 静默忽略，`${GROUPS}` 于是展开成 "20"
+          #   （本机组 ID），下面那个 for 就只遍历一个假的 service 名 →
+          #   清单里只写进 1 个镜像，而且**每一步都绿**（本地复现时实测：
+          #   `::error::取不到 20 的 digest`）。
+          #   同一条坑在 scripts/ci/plan-release.sh:196 有原始记录 —— 那边改名成了 BUILD_GROUPS。
+          #   plan-release.sh 输出的 env 键仍叫 BAKE_GROUPS（它是被 source 的，不经过这里）。
+          BUILD_GROUPS: ${{ needs.plan.outputs.groups }}
         run: |
           set -euo pipefail
           REG="${REGISTRY}"
@@ -548,7 +555,7 @@ jobs:
               | awk '$1 == "Digest:" {print $2}' || true
           }
 
-          for svc in ${GROUPS}; do
+          for svc in ${BUILD_GROUPS}; do
             repo="${REG}/${NS}/rankhub-${svc}"
             dig="$(get_digest "${repo}:${TAG}" || true)"
             if [ "${dig:0:7}" != "sha256:" ]; then
