@@ -67,6 +67,12 @@ outputs:
   default-branch:
     description: 仓库默认分支名
     value: ${{ steps.resolve.outputs.default_branch }}
+  repository-path:
+    description: >-
+      `owner/repo` 形式的仓库标识。**actions/checkout 只接受这个形状**，不接受 SSH/HTTPS URL
+      （传 URL 会被判 `Invalid repository … Expected format {owner}/{repo}`，首跑实测）；
+      而 `git ls-remote` / `git fetch` 要的是完整 URL。同一个 input 喂两个消费方，必须分开。
+    value: ${{ steps.resolve.outputs.repository_path }}
   ssh-dir:
     description: >-
       本次跑用到的 SSH 材料目录（私钥 + 专用 known_hosts）。下游步骤若要自己跑 git
@@ -222,6 +228,31 @@ runs:
           echo "ref_type=${resolved_type}"
           echo "branch_or_tag=${TARGET_REF}"
           echo "default_branch=${default_branch}"
+
+          # ❗ 同一个 input 要喂两个消费方，形状要求不同：
+          #   * git ls-remote / git fetch → 要完整 URL（git@host:owner/repo.git）
+          #   * actions/checkout          → 只认 owner/repo，传 URL 直接判 "Invalid repository"
+          # 所以从 URL 里剥出 owner/repo，两边各取所需。
+          # 三种 URL 写法都覆盖：git@host:owner/repo.git / ssh://git@host/owner/repo.git / https://host/owner/repo.git
+          # 已经是 owner/repo 时原样放行（checkout 本来就接受这个形状）。
+          repository_path="${CODEUP_REPO}"
+          case "${CODEUP_REPO}" in
+            git@*:*)             repository_path="${CODEUP_REPO#git@*:}" ;;
+            ssh://git@*)         repository_path="${CODEUP_REPO#ssh://git@*/}" ;;
+            https://*|http://*)  repository_path="${CODEUP_REPO#*://*/}" ;;
+          esac
+          repository_path="${repository_path%.git}"
+          # ❗ 只要「含斜杠、无空白、不含 ://」就够了：Codeup 的 owner 允许斜杠层级
+          #    （stcn/RankHub/RankHub-NET 有两层），所以不能用 `a/b` 这种收紧的正则。
+          if [ -z "${repository_path}" ] \
+             || [ "${repository_path#*/}" = "${repository_path}" ] \
+             || printf '%s' "${repository_path}" | grep -q '[[:space:]]' \
+             || printf '%s' "${repository_path}" | grep -q '://'; then
+            echo "::error::无法从 '${CODEUP_REPO}' 解析出 owner/repo —— actions/checkout 只接受这个形状（不接受 SSH/HTTPS URL）。请把 input repository 写成 git@<host>:<owner>/<repo>.git 或 <owner>/<repo>"
+            exit 1
+          fi
+
+          echo "repository_path=${repository_path}"
           echo "ssh_dir=${ssh_dir}"
         } >> "${GITHUB_OUTPUT}"
 
@@ -230,14 +261,18 @@ runs:
     # —— ② 检出：钉在第 ① 步解析出的 commit 上，杜绝「解析到构建之间分支又动了」 ——
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        repository: ${{ inputs.repository }}
+        # ❗ 这里必须是 owner/repo：actions/checkout 不接受 SSH URL（见 outputs.repository-path）
+        repository: ${{ steps.resolve.outputs.repository_path }}
         ref: ${{ steps.resolve.outputs.commit }}
         path: ${{ inputs.path }}
         fetch-depth: ${{ inputs.fetch-full-history == 'true' && 0 || 1 }}
         fetch-tags: ${{ inputs.fetch-full-history }}
         ssh-key: ${{ inputs.ssh-key }}
         ssh-known-hosts: ${{ inputs.ssh-known-hosts }}
+        # 显式写出来（默认就是 git）：Codeup 的 SSH 用户固定是 git，写死免得将来被"优化"掉。
+        ssh-user: git
         # 取码凭据只用于读：不持久化到 git config，后续步骤拿不到它。
+        #（fetch-baseline 因此要让 checkout-source 把 ssh-dir 传下去 —— 见其 inputs.ssh-dir）
         persist-credentials: false
 
     - name: sanity check
