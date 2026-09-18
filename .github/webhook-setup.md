@@ -141,7 +141,7 @@ https://api.github.com/repos/Project-Fukakai/RankHub/dispatches
 | `契约同步`（分层） | ~5.5 分钟 | 含 `pnpm install` 25s；CI 克隆里没有 `contract-stamp.json`，走不了指纹快路径，每次都全量 |
 | `lint / test:unit` | ~2 分钟 | lint 约 50s，其余是 vitest |
 
-调试期踩到并已修掉的四个坑（都写进了对应文件的注释）：
+调试期踩到并已修掉的**五个**坑（都写进了对应文件的注释）：
 
 1. **`actions/checkout` 只能检出同平台仓库** —— 对 Codeup 路径，传 URL 报
    `Invalid repository … Expected format {owner}/{repo}`，传 `owner/repo` 它也认证不了。
@@ -150,6 +150,10 @@ https://api.github.com/repos/Project-Fukakai/RankHub/dispatches
 3. **注释里的 `${{ … }}` 也会被求值** —— 在 action 注释里写示例表达式会让 action 直接加载失败
    （composite action 里没有 `needs` 上下文）。
 4. **契约 job 必须自己 `pnpm install`** —— 当前 main 上的脚本不自装依赖。
+5. **manifest job 的 `GROUPS` 撞上 bash 内置只读数组** —— 赋值被静默忽略，`${GROUPS}` 展开成
+   "20"（本机组 ID），清单里只写进 1 个镜像而每一步都绿。已改名 `BUILD_GROUPS`，
+   并由 `testing/ci/gha-build-contract.test.ts` 的两个断言守住。
+   （同一条坑在 `scripts/ci/plan-release.sh:196` 早有记录。）
 
 > ⚠️ 已知**代码侧**红项：`apps/backend/tests/unit/maimai-profiles.test.ts` 的 `upload_time`
 > 断言依赖机器时区（开发机 CST 过、UTC runner 红）。修法是给 backend 的 `test*` 脚本钉
