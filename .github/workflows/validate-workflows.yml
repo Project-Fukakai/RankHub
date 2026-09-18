@@ -1,0 +1,150 @@
+# validate-workflows —— 守住「本仓库只放 workflow」这条不变量
+#
+# 背景：Project-Fukakai/RankHub 在本次迁移后**只承载 .github/**（构建定义、取码凭据、
+# 镜像、部署全在别处）。历史上这个仓库还有过 old / archive 分支，所以「这里只有 workflow」
+# 不是理所当然的 —— 一旦有人把源码或产物塞进来，就会出现「改这里以为能改构建」的误导
+#（CI_CD_PIPELINE §4.9 记过这条风险的代价）。
+#
+# 本文件**不依赖 Codeup 取码**：只检查本仓库自己的 .github/ 树，用 runner 自带的
+# python3 + pyyaml。所以它是本仓库唯一的「自检门禁」。
+#
+# ❗ 内嵌的 python 一律用 `python3 - <<'PY' ... PY` 且**代码顶格写**：
+#    带缩进的 heredoc 会把缩进原样交给解释器，直接 IndentationError。
+
+name: validate-workflows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: 结构护栏
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 本仓库只放 .github/（README/LICENSE 例外）
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 允许的根条目：.github 本体 + 仓库门面（GitHub 首页展示用）。
+          # ❗ 不是「什么都允许」：源码目录、Dockerfile、package.json、构建产物一旦出现就是错误。
+          strays="$(find . -mindepth 1 -maxdepth 1 \
+            -not -name '.github' -not -name 'README.md' -not -name 'LICENSE' -not -name 'LICENSE.md' \
+            | sort)"
+          if [ -n "${strays}" ]; then
+            echo "::error::仓库根出现了不允许的条目 —— 本仓库只放 workflow（构建定义在 Codeup）："
+            printf '%s\n' "${strays}"
+            exit 1
+          fi
+          echo "✓ 仓库根只有 .github/（+ README/LICENSE）"
+
+      - name: YAML 可解析 + workflow 基本形状
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys, pathlib, yaml
+
+          errors = []
+          files = sorted(pathlib.Path('.github/workflows').glob('*.y*ml'))
+          if not files:
+              errors.append('.github/workflows 下没有任何 workflow 文件')
+          for f in files:
+              try:
+                  doc = yaml.safe_load(f.read_text())
+              except Exception as exc:  # noqa: BLE001
+                  errors.append(f'{f}: YAML 解析失败：{exc}')
+                  continue
+              if not isinstance(doc, dict):
+                  errors.append(f'{f}: 顶层不是 mapping')
+                  continue
+              # `on:` 在 YAML 1.1 里会被解析成布尔 True —— 两种写法都接受。
+              if 'on' not in doc and True not in doc:
+                  errors.append(f'{f}: 缺 `on:` 触发器')
+              if 'jobs' not in doc or not isinstance(doc['jobs'], dict) or not doc['jobs']:
+                  errors.append(f'{f}: 缺 `jobs:` 或为空')
+              if 'permissions' not in doc:
+                  # 公开仓库默认只读，但显式声明才是可审计的 —— 作为错误而不是警告。
+                  errors.append(f'{f}: 缺 `permissions:`（显式声明最小权限）')
+              print(f'✓ {f}')
+          for e in errors:
+              print(f'::error::{e}')
+          sys.exit(1 if errors else 0)
+          PY
+
+      - name: 第三方 action 必须 pin 到 commit SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, sys, pathlib
+
+          # 只盯 `uses:`；本地 action（./.github/actions/...）不受约束。
+          uses_re = re.compile(r'^\s*-?\s*uses:\s*(\S+)\s*(?:#\s*(.*))?$', re.M)
+          sha_re = re.compile(r'^[^@]+@[0-9a-f]{40}$')
+
+          errors, pinned = [], 0
+          targets = sorted(pathlib.Path('.github').rglob('*.yml')) \
+                  + sorted(pathlib.Path('.github').rglob('*.yaml'))
+          for f in targets:
+              for m in uses_re.finditer(f.read_text()):
+                  ref, comment = m.group(1), (m.group(2) or '').strip()
+                  if ref.startswith('./'):
+                      continue
+                  if not sha_re.match(ref):
+                      errors.append(
+                          f'{f}: `uses: {ref}` 没 pin 到 40 位 commit SHA '
+                          f'—— 浮动 tag 可被上游改写（供应链风险）'
+                      )
+                      continue
+                  if not comment:
+                      errors.append(f'{f}: `uses: {ref}` 缺版本注释（形如 `# v7.0.1`），明年没人知道该升到哪')
+                      continue
+                  pinned += 1
+          print(f'已 pin 的第三方 action：{pinned} 个')
+          for e in errors:
+              print(f'::error::{e}')
+          sys.exit(1 if errors else 0)
+          PY
+
+      - name: runs-on 必须走仓库变量（预留自建 runner）
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys, pathlib, yaml
+
+          # 跨境外推镜像是本次迁移的已知最大风险（CI_CD_PIPELINE §0.1）。
+          # 缓解手段就是「换 runner 只改一个仓库变量」—— 如果哪天有人写了字面量
+          # `runs-on: ubuntu-latest`，那条退路就悄悄没了。所以把它变成硬断言。
+          errors = []
+          for f in sorted(pathlib.Path('.github/workflows').glob('*.y*ml')):
+              doc = yaml.safe_load(f.read_text()) or {}
+              jobs = doc.get('jobs') or {}
+              for name, job in jobs.items():
+                  if not isinstance(job, dict):
+                      continue
+                  runs_on = job.get('runs-on')
+                  if runs_on is None:
+                      continue
+                  # 只接受 ${{ vars.CI_RUNNER || '...' }} 这一种写法。
+                  if not (isinstance(runs_on, str) and 'vars.CI_RUNNER' in runs_on):
+                      errors.append(
+                          f'{f}: jobs.{name}.runs-on = {runs_on!r} —— 必须写成 '
+                          "${{ vars.CI_RUNNER || 'ubuntu-24.04' }}（换自建 runner 只改一个变量）"
+                      )
+          for e in errors:
+              print(f'::error::{e}')
+          sys.exit(1 if errors else 0)
+          PY

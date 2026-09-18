@@ -1,0 +1,59 @@
+name: setup Node + pnpm
+description: >-
+  按仓库根钉定的 Node 版本与 pnpm 版本准备工具链，并缓存 pnpm store。
+  release 与 pr-gate 两条流水线共用一份，避免两处版本钉法漂移。
+
+# 两个「踩过就别再踩」的坑（原样照搬 .yunxiao/*.yml 顶部注释的实测结论）：
+#   ① **不用 corepack**：Node 22.12 自带的 corepack 会校验 npm registry 签名并炸掉
+#      （`Cannot find matching keyid`，云效 run#15 实锤）。改用 pnpm/action-setup 显式装版本。
+#   ② **Node 必须 >= 22.12.0**：rolldown（vitest 依赖）的 engines 是
+#      `^20.19.0 || >=22.12.0`，写成 `22` 会解析到 22.0.0 → pnpm 跳过 optional 依赖
+#      → vitest 全部 Startup Error（云效 run#12/#13 实锤）。
+#
+# pnpm store 缓存的语义与云效版一致（那边是 `pnpm config set store-dir /root/.cache/pnpm-store`
+# 复用平台持久缓存目录）：frozen-lockfile 命中缓存后只需要硬链接，install 从 ~25s 降到几秒。
+
+inputs:
+  node-version:
+    description: Node 版本（必须 >= 22.12.0，理由见上）
+    required: false
+    default: '22.12.0'
+  pnpm-version:
+    description: pnpm 版本（与 package.json 的 packageManager 保持一致）
+    required: false
+    default: '10.12.3'
+  cache:
+    description: 是否缓存 pnpm store
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    # pnpm 必须先装：setup-node 的 `cache: pnpm` 需要 PATH 上已经有 pnpm。
+    - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      with:
+        version: ${{ inputs.pnpm-version }}
+        # 只装二进制，不在这里 install（各 job 的 install 时机不同：
+        # 契约 job 刻意「按需 install」，见 scripts/ci/pr-gate-contract.sh 头注释）。
+        run_install: false
+
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.cache == 'true' && 'pnpm' || '' }}
+        cache-dependency-path: '**/pnpm-lock.yaml'
+
+    - name: versions
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "[setup-node-pnpm] node=$(node -v) pnpm=$(pnpm -v)"
+        # ❗ rolldown 的 engines 边界：低于 22.12.0 就会静默跳过 optional 依赖。
+        node -e '
+          const [maj, min] = process.versions.node.split(".").map(Number);
+          if (maj < 22 || (maj === 22 && min < 12)) {
+            console.error(`::error::Node ${process.versions.node} < 22.12.0 —— rolldown 的 optional 依赖会被跳过，vitest 会全部 Startup Error`);
+            process.exit(1);
+          }
+        '

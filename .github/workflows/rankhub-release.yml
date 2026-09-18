@@ -1,0 +1,651 @@
+# rankhub-release —— RankHub 正式发布流水线（GitHub Actions）
+#
+# 等价物是云效侧的 `rankhub-release`（pipelineId 5279143，权威内容存在云效，仓库里的
+# .yunxiao/rankhub-release.yml 只是它的副本）。本文件是**迁移后的权威定义**。
+#
+# 链路：Codeup push/tag（webhook → repository_dispatch）→ ① resolve(自解析 ref → 不可变 commit)
+#       → ② gate(lint+test:unit ／ 契约零 diff 全量) → ③ plan(变更检测)
+#       → ④ build(矩阵并行，5 镜像推 TCR) → ⑤ manifest(按 digest 产出 release-manifest.json + 制品)
+#
+# ══════════════════════════════════════════════════════════════════════════════
+# 与云效版的结构差异（逐条都有理由，改之前先读）
+# ══════════════════════════════════════════════════════════════════════════════
+# * **代码从哪里来**：本仓库（Project-Fukakai/RankHub）**只放 workflow**；源码仍以 Codeup
+#   为唯一真源，经只读 SSH deploy key 检出到 `codeup/`。因此**所有步骤都在 `codeup/` 里跑**
+#   —— 编排脚本（scripts/ci/*.sh）、docker-bake.hcl、Dockerfile 一律来自代码仓库，
+#   而不是本仓库。这样「构建定义的唯一来源」这条不变量不被破坏（CI_CD_PIPELINE §4.9）。
+# * **触发**：GHA 看不到 Codeup 的仓库事件，靠 Codeup 仓库 Webhook POST 到
+#   `repository_dispatch`（或 GHA 本仓库其余 workflow 之后手动 workflow_dispatch）。
+#   ❗ repository_dispatch **不提供 github.sha / github.ref**（都是默认分支），
+#   所以一切以 `resolve` job 自解析出的 commit 为准 —— 见其注释。
+# * **digest 传递**：云效版跨 job 制品不通（ArtifactDownload 步骤不存在），所以 manifest job
+#   重跑一遍取 digest；GHA 有 artifact，改成 build 矩阵 job 上传 `digests-<group>.txt`。
+# * **构建缓存**：云效用 `cacheType: remote` + TCR 上的 `rankhub-cache:<x>` 镜像；这里改用
+#   GHA 原生 `type=gha`，**每个 target 一个 scope**。两个好处：不跨境拉 cache 层，
+#   且顺手消掉云效版 frontend/admin 共享 `:web` cache tag 的并发覆盖竞态。
+# * **镜像 tag 不变**：仍是 `sha-<commit8>`（外部契约，apply-release.sh 按它解析）。
+#   ❗ 云效版用的是内置变量 `${CI_COMMIT_ID}`；GHA 没有等价物，由 resolve 截断成 8 位后
+#   经 `source_short_sha` 贯穿全程 —— 顺手修掉云效版「digest 步骤写死 8 位、
+#   plan.json 的 shortSha 是 12 位」那处不一致。
+# * **job 摘要**：云效是 job 摘要面板，GHA 写 `$GITHUB_STEP_SUMMARY`。
+# * **人工卡点**：仍然没有（2026-09-18 的决定）。生产闸门是**部署动作**（admin 改
+#   DEPLOY_TARGET_TAG，必填 reason + 审计）。**不要**在本文件里加 Environment/人工审批。
+#
+# ══════════════════════════════════════════════════════════════════════════════
+# 已实测约束（照云效版顶部那份，动本文件前必读）
+# ══════════════════════════════════════════════════════════════════════════════
+# * 步骤之间不共享 shell（与云效同）—— 每个 job 收敛成「一个编排脚本」最稳。
+# * Node 必须 >= 22.12.0，否则 rolldown 的 optional 依赖被跳过 → vitest 全灭（run#12）。
+# * 不用 corepack：Node 22.12 自带 corepack 校验 npm registry 签名会炸（run#15）。
+# * `nestia sdk` 是内存尖峰：58 个 controller 的元数据在一个 Node 进程里组装完，
+#   默认堆（约 4GB）压在临界点上 → run#22 实测 OOM（exit 134）。契约 job 显式
+#   `NODE_OPTIONS=--max-old-space-size=8192`（runner 有 16GB）。
+# * Dockerfile 里**不要**加 `# syntax=` 指令（会让 BuildKit 去拉外部 frontend；docker 26 内置够用）。
+# * 根 Dockerfile 的三个 target 必须显式 `--target`，不传则默认构建最后一个 stage（admin）。
+#
+# ══════════════════════════════════════════════════════════════════════════════
+# ❗ 已知风险：跨境推镜像
+# ══════════════════════════════════════════════════════════════════════════════
+# 文档 §0.1 记录过：第 2 版从 GHA 迁到云效的**核心原因**就是「GB 级镜像从境外 runner 推腾讯云
+# TCR」是最大风险。本次迁回 GHA，这条风险原样回归。
+# 缓解：`runs-on` 已抽成仓库变量（`CI_RUNNER` / `CI_RUNNER_SELF_HOSTED`），一旦要换国内自建
+# runner，只改仓库变量、**不动本文件**。切换步骤见 .github/webhook-setup.md。
+#
+# ══════════════════════════════════════════════════════════════════════════════
+# 轮询兜底（默认关闭）：Codeup Webhook 若不可用，把下面两行注释打开即可。
+# ❗ 打开前先确认 Webhook 真的没在跑，否则一次 push 会触发两次发布。
+# ══════════════════════════════════════════════════════════════════════════════
+#  schedule:
+#    - cron: '*/15 * * * *'   # 每 15 分钟比一次 Codeup main 与已发布的 sha-<8>，相同则 no-op
+
+name: rankhub-release
+
+on:
+  repository_dispatch:
+    # Codeup 仓库 Webhook 的 event_type。payload 只需要 `{"ref": "<branch|tag>"}`。
+    types: [codeup-push]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: '要发布的 Codeup ref（分支名或 tag 名）'
+        required: true
+        default: 'main'
+      ref_type:
+        description: 'ref 的类型'
+        required: true
+        type: choice
+        options: [branch, tag]
+        default: branch
+
+# 公开仓库的默认 GITHUB_TOKEN 是只读；显式声明最小权限（upload-artifact 用它写 GHA cache/制品）。
+permissions:
+  contents: read
+
+# 同一个 ref 只允许一条发布在跑：并发发布会让「同一 commit 推两次镜像」变成竞态。
+# ❗ 刻意**不**开 cancel-in-progress：构建中途被打断会留下推了一半的 tag。
+concurrency:
+  group: rankhub-release-${{ github.event.client_payload.ref || inputs.ref || 'unknown' }}
+  cancel-in-progress: false
+
+env:
+  CODEUP_REPO: git@codeup.aliyun.com:stcn/RankHub/RankHub-NET.git
+  REGISTRY: ccr.ccs.tencentyun.com
+  NAMESPACE: rankhub
+  # ❗ 见顶部：必须 >= 22.12.0，别写成 "22"。
+  NODE_VERSION: '22.12.0'
+  PNPM_VERSION: '10.12.3'
+  # 发布 tag 的形状（与 scripts/ci/plan-release.sh 的 RELEASE_TAG_RE 一致）。
+  RELEASE_TAG_RE: '^20[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$'
+
+jobs:
+
+  # ────────────────────────────────────────────────────────────────── ⓪ 解析目标 commit
+  # GHA 没有「Codeup 仓库的 ref」，所以先把 ref 解析成不可变 commit，后续 job 全部钉它。
+  # 也在这里做**发布资格判定**：分支必须恰好是 main，tag 必须匹配发布号形状。
+  resolve:
+    name: 解析目标 commit
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    outputs:
+      commit: ${{ steps.src.outputs.commit }}
+      short_sha: ${{ steps.src.outputs.short-sha }}
+      sha12: ${{ steps.src.outputs.sha12 }}
+      ref_type: ${{ steps.src.outputs.ref-type }}
+      branch_or_tag: ${{ steps.src.outputs.branch-or-tag }}
+      default_branch: ${{ steps.src.outputs.default-branch }}
+      eligible: ${{ steps.gate.outputs.eligible }}
+      reason: ${{ steps.gate.outputs.reason }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: src
+        uses: ./.github/actions/checkout-source
+        with:
+          repository: ${{ env.CODEUP_REPO }}
+          path: codeup
+          ref: ${{ github.event.client_payload.ref || inputs.ref || '' }}
+          ref-type: ${{ inputs.ref_type || '' }}
+          # 发布要完整历史：plan-release.sh 的基线是 `git describe --tags` 的最近发布 tag，
+          # 浅克隆会让「变更检测」退化为全量构建（云效版 cloneDepth: 0 是同一条理由）。
+          fetch-full-history: 'true'
+          ssh-key: ${{ secrets.CODEUP_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.CODEUP_KNOWN_HOSTS }}
+
+      - id: gate
+        name: 发布资格判定
+        shell: bash
+        env:
+          REF_TYPE: ${{ steps.src.outputs.ref-type }}
+          BRANCH_OR_TAG: ${{ steps.src.outputs.branch-or-tag }}
+          DEFAULT_BRANCH: ${{ steps.src.outputs.default-branch }}
+        run: |
+          set -euo pipefail
+          eligible=1
+          reason=""
+          if [ "${REF_TYPE}" = "tag" ]; then
+            if printf '%s' "${BRANCH_OR_TAG}" | grep -qE "${RELEASE_TAG_RE}"; then
+              reason="发布 tag"
+            else
+              eligible=0
+              reason="tag 不匹配发布号形状 ${RELEASE_TAG_RE}（云效版靠 branchesFilter 过滤，这里必须显式判）"
+            fi
+          elif [ "${BRANCH_OR_TAG}" = "${DEFAULT_BRANCH}" ]; then
+            reason="默认分支 ${DEFAULT_BRANCH}"
+          else
+            eligible=0
+            reason="分支 ${BRANCH_OR_TAG} 不是默认分支 ${DEFAULT_BRANCH}（云效版 branchesFilter 只放 main 与发布 tag）"
+          fi
+
+          {
+            echo "eligible=${eligible}"
+            echo "reason=${reason}"
+          } >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "### rankhub-release · 目标解析"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| ref | \`${BRANCH_OR_TAG}\` (${REF_TYPE}) |"
+            echo "| commit | \`${{ steps.src.outputs.commit }}\` |"
+            echo "| 镜像 tag | \`sha-${{ steps.src.outputs.short-sha }}\` |"
+            echo "| 发布资格 | $([ "${eligible}" = "1" ] && echo "✅ ${reason}" || echo "⏭️ 跳过：${reason}") |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${eligible}" != "1" ]; then
+            echo "::notice::本次不发布：${reason}"
+          fi
+
+  # ────────────────────────────────────────────────────────────────── ① 门禁（与构建并行前）
+  # 与云效版一致：门禁在 build 之前，不过门禁不花构建核分。
+  lint_test:
+    name: lint / test:unit
+    needs: resolve
+    if: needs.resolve.outputs.eligible == '1'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          repository: ${{ env.CODEUP_REPO }}
+          path: codeup
+          ref: ${{ needs.resolve.outputs.commit }}
+          # 只跑 lint/单测，不需要 tag 祖先链；但保留完整历史仍是默认（成本可接受且更稳）。
+          fetch-full-history: 'true'
+          ssh-key: ${{ secrets.CODEUP_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.CODEUP_KNOWN_HOSTS }}
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+      - name: lint + test:unit
+        working-directory: codeup
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          # 仓库没有 typecheck 脚本：类型检查并进了各包 lint（tsc --noEmit）。
+          pnpm lint
+          pnpm test:unit
+
+  # 契约**全量**校验（与上面的 job 并行）。
+  #
+  # 为什么发布期还要再跑一次（MR 门禁已经跑过分层版）：**MR 门禁的快路径是「信任生成器指纹」**，
+  # 而指纹是仓库里的文件、理论上可以被伪造；更重要的是 `packages/shared-sdk/generated/sdk`
+  # 真的会被打进 **frontend 镜像**（apps/frontend 依赖 @rankhub/shared-sdk）—— 制品这一侧
+  # 不该靠任何「本地跑过生成」的信任，必须现场重算。代价约 200s，换来「过期契约不可能随镜像上线」。
+  contract_verify:
+    name: 契约零 diff（全量）
+    needs: resolve
+    if: needs.resolve.outputs.eligible == '1'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          repository: ${{ env.CODEUP_REPO }}
+          path: codeup
+          ref: ${{ needs.resolve.outputs.commit }}
+          fetch-full-history: 'true'
+          ssh-key: ${{ secrets.CODEUP_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.CODEUP_KNOWN_HOSTS }}
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+      - name: identity swagger / backend SDK 零 diff（强制全量）
+        working-directory: codeup
+        env:
+          # scope=all 让两侧都跑；PR_GATE_SDK=full 让 SDK 侧不走近路。
+          # 给的是「不信任指纹」的语义 —— 这正是发布期需要的。
+          PR_GATE_CONTRACT_SCOPE: 'all'
+          PR_GATE_SDK: 'full'
+          # ❗ 内存尖峰见顶部注释（run#22 的 OOM 边界）。
+          NODE_OPTIONS: '--max-old-space-size=8192'
+        run: |
+          set -euo pipefail
+          # 刻意**不**在这里 pnpm install：pr-gate-contract.sh 自己按需装
+          #（指纹快路径 / 双侧都跳过时连 install 都省掉）。
+          bash scripts/ci/pr-gate-contract.sh
+
+  # ────────────────────────────────────────────────────────────────── ② 变更检测
+  plan:
+    name: 变更检测
+    needs: [resolve, lint_test, contract_verify]
+    if: |
+      always() && needs.resolve.outputs.eligible == '1'
+      && needs.lint_test.result == 'success' && needs.contract_verify.result == 'success'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    outputs:
+      selected: ${{ steps.read.outputs.selected }}
+      groups: ${{ steps.read.outputs.groups }}
+      version: ${{ steps.read.outputs.version }}
+      full_build: ${{ steps.read.outputs.full_build }}
+      migrations_changed: ${{ steps.read.outputs.migrations_changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          repository: ${{ env.CODEUP_REPO }}
+          path: codeup
+          ref: ${{ needs.resolve.outputs.commit }}
+          # 基线要 tag，必须完整历史（同上）。
+          fetch-full-history: 'true'
+          ssh-key: ${{ secrets.CODEUP_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.CODEUP_KNOWN_HOSTS }}
+
+      - name: 生成发布计划
+        working-directory: codeup
+        env:
+          # plan-release.sh 优先读 CI_COMMIT_SHA/CI_COMMIT_REF_NAME（云效内置变量）。
+          # 这里显式喂给它解析后的 commit —— 不能让 git rev-parse 兜底，
+          # 因为检出的是 detached commit，而 repository_dispatch 的 github.sha 是默认分支。
+          CI_COMMIT_SHA: ${{ needs.resolve.outputs.commit }}
+          CI_COMMIT_REF_NAME: ${{ needs.resolve.outputs.branch_or_tag }}
+        run: bash scripts/ci/plan-release.sh --check-args
+
+      - id: read
+        name: 读取计划并生成构建矩阵
+        shell: bash
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          set -a; source codeup/.ci/plan.env; set +a
+
+          # ❗ 云效版「web」是一个 job 内串行跑 backend+frontend+admin（那边注释的理由是
+          #    「不要同时起三个 4GB 堆的构建」——那是**云效构建机内存**的约束）。
+          #    GHA 每个矩阵 entry 一台独立 runner，三者在**不同机器**上并行，
+          #    既没有同机内存争抢，也不再让 frontend/admin 白等 backend 5 分钟。
+          groups=""
+          for g in ${BAKE_GROUPS:-}; do
+            case "${g}" in
+              web)               groups="${groups} backend frontend admin" ;;
+              identity-service)  groups="${groups} identity-service" ;;
+              supervisor)        groups="${groups} supervisor" ;;
+              *)
+                # game-assets 归独立流水线（§6.5），不该出现在本矩阵里。
+                echo "::warning::plan 选中了本流水线不构建的组 '${g}'，已忽略"
+                ;;
+            esac
+          done
+          groups="$(printf '%s' "${groups}" | tr -s ' ' | sed 's/^ //; s/ $//')"
+
+          # 矩阵 = 组名数组。每个 entry 的构建契约在 docker-bake.hcl 里（唯一来源），
+          # 这里只决定「建哪几个」，未选中的组根本不会起 runner。
+          selected="[]"
+          if [ -n "${groups}" ]; then
+            selected="[$(printf '%s' "${groups}" | tr ' ' '\n' | sed 's/.*/{"group":"&"}/' | paste -sd, -)]"
+          fi
+
+          echo "selected=${selected}" >> "${GITHUB_OUTPUT}"
+          echo "groups=${groups}" >> "${GITHUB_OUTPUT}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "full_build=${FULL_BUILD}" >> "${GITHUB_OUTPUT}"
+          echo "migrations_changed=${MIGRATIONS_CHANGED}" >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "### 发布计划"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 版本 | \`${VERSION}\` |"
+            echo "| 镜像 tag | \`${BAKE_TAG}\` |"
+            echo "| 渠道 | ${CHANNEL} |"
+            echo "| 基线 | \`${PLAN_BASE:-<none, 全量>}\` |"
+            echo "| 全量构建 | ${FULL_BUILD} |"
+            echo "| 迁移变更 | ${MIGRATIONS_CHANGED} |"
+            echo "| 构建组 | ${groups:-<无>} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: 打印计划
+        working-directory: codeup
+        run: |
+          set -euo pipefail
+          echo "==== plan.json ===="
+          cat .ci/plan.json
+          echo
+          echo "==== plan.env ===="
+          cat .ci/plan.env
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plan
+          path: |
+            codeup/.ci/plan.json
+            codeup/.ci/plan.env
+          retention-days: 7
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────────────────────────── ③ 构建并推送（矩阵并行）
+  build:
+    name: build ${{ matrix.group }}
+    needs: [resolve, plan]
+    # ❗ 空矩阵在 GitHub 上不是「跳过」而是**报错**，所以 `selected == '[]'` 必须在
+    #    job 级 if 里挡掉。这一条同时覆盖「plan 判出无变化」这个合法结果。
+    if: needs.plan.outputs.selected != '[]'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 180
+    strategy:
+      # 一个 target 失败就全停：半套镜像没有发布价值，早停省额度也省得误导。
+      fail-fast: true
+      matrix:
+        # ❗ 矩阵 entry 由 plan 输出：**只包含真正要建的 target**，未选中的组不起 runner
+        #    （空矩阵在 GitHub 上是报错而非跳过，故 selected='[]' 由上面的 job 级 if 挡掉）。
+        #    构建契约（Dockerfile / target / build args）不在这里 —— 它们在
+        #    docker-bake.hcl 里，这里只负责「建哪几个」。
+        include: ${{ fromJSON(needs.plan.outputs.selected) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          repository: ${{ env.CODEUP_REPO }}
+          path: codeup
+          ref: ${{ needs.resolve.outputs.commit }}
+          # 构建只需要这一个 commit：不需要 tag 祖先链（变更检测已在 plan 里做完）。
+          fetch-full-history: 'false'
+          ssh-key: ${{ secrets.CODEUP_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.CODEUP_KNOWN_HOSTS }}
+
+      # ❗ 云效版有平台内置的 buildx；GHA 必须自己装（docker-container driver 才能推 registry cache，
+      #    也是 bake --push 拿 digest 的前提）。
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.TCR_USERNAME }}
+          password: ${{ secrets.TCR_PASSWORD }}
+
+      # ── 构建并推送 ────────────────────────────────────────────────────────────────
+      # ❗ 用 `docker buildx bake` 而不是 docker/build-push-action：
+      #    docker-bake.hcl 是**所有镜像的唯一构建定义**（CI_CD_PIPELINE §6.3），
+      #    本地应急构建（scripts/build-and-push-nexus.sh）也读它。在这里另写一份
+      #    「Dockerfile / target / build args」等于把这条不变量拆成两处 —— 必然漂移。
+      #    所以这里只做三件事：选 target、注入变量、把缓存后端换成 GHA。
+      # ❗ 缓存后端：bake 文件在 CACHE_MODE != registry 时把 cache-from/to 置空，
+      #    这里用 --set 单独补上 `type=gha` —— 不动 HCL，也就不改变本地/云效的既有语义。
+      #    每个 target 一个 scope（云效版的 :web 共享 tag 有并发覆盖竞态）。
+      - name: 构建并推送
+        working-directory: codeup
+        env:
+          # buildx bake 的变量覆盖走同名环境变量（bake 文件顶部已写明这条契约）。
+          REGISTRY: ${{ env.REGISTRY }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          # 镜像 tag 的 8 位短 SHA —— 外部契约（apply-release.sh 按 sha-<8> 解析）。
+          TAG: sha-${{ needs.resolve.outputs.short_sha }}
+          # /metrics 的 version 标签（S1）。plan.json 的 shortSha 是 12 位，这里显式喂 8 位，
+          # 保证 label 与 tag 指向同一个 commit 前缀口径。
+          GIT_SHA: ${{ needs.resolve.outputs.short_sha }}
+          # ❗ 与云效版逐字对齐的构建参数（同一条理由：镜像站口径三处一致）。
+          BASE_NODE: docker.m.daocloud.io/library/node:22-bookworm-slim
+          # 云效构建机 8C16G 时把 nestia phase2 从 251s 压到 96s；GHA 托管 runner 是 4C16G，
+          # 实测 OOM 就降到 2 —— 见 .github/webhook-setup.md 的落地记录。
+          NESTIA_BUILD_PARALLELISM: '4'
+          # NEXT_PUBLIC_IDENTITY_BASE_URL 被 Next 内联进客户端包 ⇒ 只能构建期传，运行时 env 无效。
+          NEXT_PUBLIC_IDENTITY_BASE_URL: https://auth.rankhub.cc/v1
+        run: |
+          set -euo pipefail
+          target="${{ matrix.group }}"
+          echo "::group::bake --print ${target}"
+          docker buildx bake -f docker-bake.hcl "${target}" --print
+          echo "::endgroup::"
+
+          docker buildx bake -f docker-bake.hcl "${target}" --push \
+            --set "${target}.cache-from=type=gha,scope=${target}" \
+            --set "${target}.cache-to=type=gha,mode=max,scope=${target}" \
+            --metadata-file bake.json
+
+          echo "::group::bake.json"
+          cat bake.json
+          echo "::endgroup::"
+
+      # digest → TSV（契约格式见 scripts/ci/emit-digests.sh 头注释）。
+      # ❗ service 名与组名逐字相同（backend/frontend/admin/identity-service/supervisor），
+      #    这也是 compose 里的服务名 —— write-manifest.sh 的 images 键就是它。
+      - name: 提取 digest
+        working-directory: codeup
+        env:
+          SERVICE: ${{ matrix.group }}
+        run: |
+          set -euo pipefail
+          bash scripts/ci/emit-digests.sh bake.json > "digests-${SERVICE}.txt"
+          cat "digests-${SERVICE}.txt"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ matrix.group }}
+          path: codeup/digests-*.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────────────────────────── ④ 发布清单
+  manifest:
+    name: 合并 digest → 清单
+    needs: [resolve, plan, build]
+    if: always() && needs.plan.result == 'success' && needs.build.result == 'success' && needs.plan.outputs.selected != '[]'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          repository: ${{ env.CODEUP_REPO }}
+          path: codeup
+          ref: ${{ needs.resolve.outputs.commit }}
+          fetch-full-history: 'true'
+          ssh-key: ${{ secrets.CODEUP_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.CODEUP_KNOWN_HOSTS }}
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: relay
+          merge-multiple: true
+
+      - name: 汇总制品
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "==== 传递过来的制品 ===="
+          find relay -type f | sort
+          # write-manifest.sh 在「当前目录 + 深度 3」内找 digests-*.txt，所以放进 codeup/。
+          cp -v relay/digests-*.txt codeup/
+          mkdir -p codeup/.ci
+          cp -v relay/plan.env codeup/.ci/plan.env
+          # plan.json 只用于摘要展示（可选）。
+          [ -f relay/plan.json ] && cp -v relay/plan.json codeup/.ci/plan.json || true
+
+      - name: 重算发布计划
+        working-directory: codeup
+        env:
+          CI_COMMIT_SHA: ${{ needs.resolve.outputs.commit }}
+          CI_COMMIT_REF_NAME: ${{ needs.resolve.outputs.branch_or_tag }}
+        run: bash scripts/ci/plan-release.sh
+
+      # ❗ 云效版有平台内置的 buildx；GHA 必须自己装 —— imagetools 与发布制品的构建都依赖它。
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # 与云效版同款：**docker login 是一类步骤，不是 DockerBuildPush 的隐式前置**。
+      # 云效要在 Command 步骤里自己 login；GHA 用 login-action，效果相同。
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.TCR_USERNAME }}
+          password: ${{ secrets.TCR_PASSWORD }}
+
+      - name: 提取全部镜像 digest
+        working-directory: codeup
+        env:
+          SOURCE_SHORT_SHA: ${{ needs.resolve.outputs.short_sha }}
+          GROUPS: ${{ needs.plan.outputs.groups }}
+        run: |
+          set -euo pipefail
+          REG="${REGISTRY}"
+          NS="${NAMESPACE}"
+          TAG="sha-${SOURCE_SHORT_SHA}"
+
+          # ❗ imagetools --format 在构建机不生效（返回默认表格）→ awk 解析 Digest 行。
+          # ❗ awk 不能提前 exit：SIGPIPE + pipefail 会直接杀掉脚本（云效 run#7 实锤）。
+          get_digest() {
+            docker buildx imagetools inspect "$1" 2>/dev/null \
+              | awk '$1 == "Digest:" {print $2}' || true
+          }
+
+          for svc in ${GROUPS}; do
+            repo="${REG}/${NS}/rankhub-${svc}"
+            dig="$(get_digest "${repo}:${TAG}" || true)"
+            if [ "${dig:0:7}" != "sha256:" ]; then
+              echo "::error::取不到 ${svc} 的 digest（got: ${dig}）"
+              exit 1
+            fi
+            printf '%s\t%s\t%s\t%s\n' "${svc}" "${TAG}" "${dig}" "${repo}" > "digests-${svc}.txt"
+          done
+
+          echo "==== digests ===="
+          cat digests-*.txt
+
+      - name: 生成发布清单
+        working-directory: codeup
+        env:
+          # 溯源：云效版是 PIPELINE_ID/BUILD_NUMBER；GHA 用 run_id/run_number（脚本里已加回退）。
+          PIPELINE_ID: ${{ github.run_id }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: bash scripts/ci/write-manifest.sh
+
+      - name: 校验发布清单
+        working-directory: codeup
+        # 空清单 / ref 缺 digest 会让「按 digest 部署」静默失效（CI_CD_PIPELINE §5.1），必须硬失败。
+        # ❗ 校验逻辑在脚本里，**不要**写回内联 `python3 -c "…"`：YAML 块标量会给多行 Python
+        #    多加一层块缩进 → `import json` 变成缩进行 → IndentationError（云端首跑实测）。
+        run: python3 scripts/ci/verify-manifest.py release-manifest.json
+
+      # 发布制品（S0.3）：FROM scratch + 两条 COPY（发布清单 + 生产 compose）。
+      # 上下文必须是仓库根：两条 COPY 的源路径（release-manifest.json /
+      # deploy/docker-compose.prod.yml）都相对仓库根。
+      # ❗ 这一条**不**走 docker-bake.hcl（bake 里没有 release-artifact target），
+      #    所以用裸 buildx —— 云效版也是单独一个 DockerBuildPush 步骤。
+      - name: 构建并推送发布制品
+        working-directory: codeup
+        env:
+          SOURCE_SHORT_SHA: ${{ needs.resolve.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --file deploy/release-artifact/Dockerfile \
+            --tag "${REGISTRY}/${NAMESPACE}/rankhub-release:sha-${SOURCE_SHORT_SHA}" \
+            --provenance=false --sbom=false \
+            --push \
+            .
+
+      - name: 给发布制品打版本号标签
+        working-directory: codeup
+        env:
+          SOURCE_SHORT_SHA: ${{ needs.resolve.outputs.short_sha }}
+        # 目标机按**版本号**取件（apply-release.sh --version），所以制品还必须有版本 tag。
+        # 这里用 imagetools 做**纯 retag**：不重新构建 ⇒ 版本 tag 与 sha tag 指向同一 digest
+        # （与 scripts/ci/tag-release.sh 同一手法）。
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          set -a; source .ci/plan.env; set +a
+          : "${VERSION:?plan.env 缺少 VERSION}"
+          REG="${REGISTRY}"
+          NS="${NAMESPACE}"
+          SRC="${REG}/${NS}/rankhub-release:sha-${SOURCE_SHORT_SHA}"
+          DST="${REG}/${NS}/rankhub-release:${VERSION}"
+
+          get_digest() {
+            docker buildx imagetools inspect "$1" 2>/dev/null \
+              | awk '$1 == "Digest:" {print $2}' || true
+          }
+
+          src_digest="$(get_digest "${SRC}" || true)"
+          if [ "${src_digest:0:7}" != "sha256:" ]; then
+            echo "::error::取不到 ${SRC} 的 digest（got: ${src_digest}）"
+            exit 1
+          fi
+          docker buildx imagetools create --tag "${DST}" "${SRC}" >/dev/null
+          dst_digest="$(get_digest "${DST}" || true)"
+          if [ "${dst_digest:0:7}" != "sha256:" ]; then
+            echo "::error::retag 后取不到 ${DST} 的 digest（got: ${dst_digest}）"
+            exit 1
+          fi
+          if [ "${dst_digest}" != "${src_digest}" ]; then
+            echo "::warning::发布制品 retag 前后 digest 不同（${src_digest} → ${dst_digest}）—— 目标机按 tag 拉取，不阻塞部署，但要在落地记录里确认"
+          fi
+          echo "发布制品就绪：${DST}@${dst_digest}"
+          echo "目标机取件命令：bash bin/apply-release.sh --version ${VERSION} --dry-run"
+
+      - name: 发布摘要
+        working-directory: codeup
+        env:
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.commit }}
+          SOURCE_SHORT_SHA: ${{ needs.resolve.outputs.short_sha }}
+        # ❗ 同样是脚本而非内联 Python（理由见上面「校验发布清单」那一步）。
+        run: python3 scripts/ci/write-summary.py .ci/plan.env
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-manifest
+          path: |
+            codeup/release-manifest.json
+            codeup/deploy/docker-compose.prod.yml
+          retention-days: 90
+          if-no-files-found: error

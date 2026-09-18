@@ -1,0 +1,68 @@
+name: fetch baseline ref
+description: >-
+  保证 <repo-path>/origin/<baseline> 存在，供 `git merge-base` 使用。
+
+# 为什么单独一个 action：契约门禁（pr-gate-contract.sh）与静态护栏（pr-gate-guards.sh）
+# **都**靠 `git merge-base origin/main HEAD` 拿基线 diff。基线拿不到时两者的行为都是
+# 「退化为全量 / 跳过依赖改动清单的检查」—— 那是**安全侧**的降级，但会让门禁悄悄变弱
+# 而没人发现。所以：能修就修好，修不好就明说（打 ::warning::）。
+
+inputs:
+  path:
+    description: 代码仓库在工作区下的相对目录
+    required: true
+  baseline-ref:
+    description: 基线 ref（例如 origin/main）
+    required: false
+    default: origin/main
+  token:
+    description: >-
+      兜底用的只读 token（HTTPS 私有仓库取码）。留空则只用 actions/checkout 已经配好的
+      deploy key。正常情况用不到 —— 它只是为了「SSH 那条路不通时还有一条路」。
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        BASELINE_REF: ${{ inputs.baseline-ref }}
+        FETCH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+
+        if git rev-parse --verify --quiet "${BASELINE_REF}" >/dev/null; then
+          echo "[fetch-baseline] ${BASELINE_REF} 已存在 @ $(git rev-parse --short "${BASELINE_REF}")"
+          exit 0
+        fi
+
+        branch="${BASELINE_REF#origin/}"
+        refspec="+refs/heads/${branch}:refs/remotes/origin/${branch}"
+
+        # ① 先走 checkout 已经配好的 origin（SSH deploy key，持久化在 git config 里）。
+        #    大多数情况下这一条就够了。
+        if git fetch --no-tags --depth=200 origin "${refspec}" 2>&1; then
+          :
+        else
+          echo "[fetch-baseline] origin 取码失败，改用显式 HTTPS 兜底"
+          # ② 兜底：SSH URL → HTTPS（覆盖 `git@host:org/repo.git` 与 `ssh://git@host/org/repo.git`
+          #    两种写法；GITHUB_TOKEN 之类的只读 token 走 x-access-token）。
+          remote_url="$(git remote get-url origin)"
+          https_url="$(printf '%s' "${remote_url}" \
+            | sed -e 's|^ssh://git@|https://|' -e 's|^git@\([^:]*\):|https://\1/|')"
+          auth_url="${https_url}"
+          if [ -n "${FETCH_TOKEN}" ]; then
+            auth_url="$(printf '%s' "${https_url}" | sed "s|^https://|https://x-access-token:${FETCH_TOKEN}@|")"
+          fi
+          git fetch --no-tags --depth=200 "${auth_url}" "${refspec}" 2>&1 || true
+        fi
+
+        if git rev-parse --verify --quiet "${BASELINE_REF}" >/dev/null; then
+          echo "[fetch-baseline] 已取回 ${BASELINE_REF} @ $(git rev-parse --short "${BASELINE_REF}")"
+          exit 0
+        fi
+
+        # ❗ 不静默放过：基线缺失会让「只禁新增」类检查全部失效，必须留下显式告警。
+        echo "::warning::拿不到基线 ${BASELINE_REF} —— 依赖 merge-base 的分流与检查会退化为全量/跳过（安全侧，但门禁变弱，请查取码权限）"

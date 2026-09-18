@@ -1,0 +1,175 @@
+name: checkout Codeup source
+description: >-
+  用只读 SSH deploy key 从 Codeup 检出 RankHub-NET 到 <path>，并把目标 ref 解析成
+  不可变的 commit SHA（annotated tag 走 ^{} 解引用）。所有下游 job 一律钉这个 SHA。
+
+# 为什么是 composite action 而不是直接 actions/checkout：
+#   * release / pr-gate 两条流水线的取码语义必须完全一致（同一条 rankhub-net 克隆，
+#     同一次 ls-remote 解析）。复制粘贴两份一定会漂移。
+#   * 云效版的取码是「流水线源原生检出 Codeup」，零凭据；GHA 看不到 Codeup 仓库事件，
+#     只能自己取码 —— 这是本次迁移唯一新增的凭据，单独收在这里便于审计与轮换。
+#
+# 凭据（仓库 Secrets）：
+#   CODEUP_SSH_KEY        只读 deploy key 的私钥（ED25519，公钥加到 Codeup 该仓库的「部署公钥」）
+#   CODEUP_KNOWN_HOSTS    `codeup.aliyun.com` 的主机公钥行。❗ 必须用**已验证的**指纹：
+#                         Codeup 官方公布 SHA256:yEGmgQNVrc3QAvDvoBrTCF2s07KwmmQ+AbWi9vSt/fE（RSA），
+#                         取法：ssh-keyscan -t rsa codeup.aliyun.com | ssh-keygen -lf - 后逐字核对。
+#                         刻意不在这里硬编码公钥（我没法在本地验证它，编一个等于埋雷），
+#                         也不在 CI 里临时 ssh-keyscan（等于信任网络中间人，失效时静默降级）。
+
+inputs:
+  repository:
+    description: Codeup 仓库的 SSH 地址
+    required: true
+  path:
+    description: 检出到工作区下的哪个相对目录
+    required: false
+    default: codeup
+  ref:
+    description: >-
+      要解析并检出的分支名 / tag 名。留空表示用仓库默认分支（仅 workflow_dispatch
+      不带 ref 时会走到，正常调度一律显式传）。
+    required: false
+    default: ''
+  ref-type:
+    description: 'branch 或 tag；留空则先按分支解析、失败再按 tag 解析'
+    required: false
+    default: ''
+  fetch-full-history:
+    description: >-
+      true = fetch-depth 0 + fetch-tags（变更检测要靠 `git describe --tags` 与 tag 祖先链；
+      契约门禁要靠 `git merge-base`）。false = 只取目标 commit。
+    required: false
+    default: 'true'
+  ssh-key:
+    description: 只读 deploy key 的私钥
+    required: true
+  ssh-known-hosts:
+    description: codeup.aliyun.com 的主机公钥行（已按官方指纹核对）
+    required: true
+
+outputs:
+  commit:
+    description: 解析出的 40 位 commit SHA
+    value: ${{ steps.resolve.outputs.commit }}
+  short-sha:
+    description: 8 位短 SHA —— 镜像 tag `sha-<8>` 的外部契约（apply-release.sh 按它解析）
+    value: ${{ steps.resolve.outputs.short_sha }}
+  sha12:
+    description: 12 位短 SHA —— plan.json 的 shortSha（与云效版口径一致）
+    value: ${{ steps.resolve.outputs.sha12 }}
+  ref-type:
+    description: 实际命中的类型：branch / tag / default
+    value: ${{ steps.resolve.outputs.ref_type }}
+  branch-or-tag:
+    description: 实际解析的 ref 名
+    value: ${{ steps.resolve.outputs.branch_or_tag }}
+  default-branch:
+    description: 仓库默认分支名
+    value: ${{ steps.resolve.outputs.default_branch }}
+
+runs:
+  using: composite
+  steps:
+    # —— ① 先解析 ref：拿到不可变的 commit SHA，后面的 checkout 钉死它 ——
+    # 刻意**不解析 webhook payload 的 JSON 结构**：Codeup 的 webhook body 形状没有稳定契约，
+    # 换成「只要 body 里带 ref 一词就能用」的自解析路径，触发器侧改字段不会弄坏流水线。
+    - id: resolve
+      shell: bash
+      env:
+        CODEUP_REPO: ${{ inputs.repository }}
+        TARGET_REF: ${{ inputs.ref }}
+        TARGET_REF_TYPE: ${{ inputs.ref-type }}
+      run: |
+        set -euo pipefail
+
+        # 默认分支：既用于「没给 ref」的回退，也用于 pr-gate 的基线。
+        default_branch="$(git ls-remote --symref "${CODEUP_REPO}" HEAD 2>/dev/null \
+          | sed -n 's|^ref: refs/heads/\([^[:space:]]*\).*|\1|p' | head -n 1 || true)"
+        if [ -z "${default_branch}" ]; then
+          echo "::error::无法从 ${CODEUP_REPO} 解析默认分支 —— 取码凭据或 known_hosts 有问题？"
+          exit 1
+        fi
+
+        if [ -z "${TARGET_REF}" ]; then
+          TARGET_REF="${default_branch}"
+          TARGET_REF_TYPE="branch"
+        fi
+
+        resolved=""
+        resolved_type=""
+
+        if [ "${TARGET_REF_TYPE}" != "tag" ]; then
+          resolved="$(git ls-remote --exit-code "${CODEUP_REPO}" "refs/heads/${TARGET_REF}" 2>/dev/null | cut -f1 || true)"
+          [ -n "${resolved}" ] && resolved_type="branch"
+        fi
+
+        if [ -z "${resolved}" ] && [ "${TARGET_REF_TYPE}" != "branch" ]; then
+          # annotated tag 的 ref 指向 tag 对象，必须用 ^{} 解引用到 commit。
+          # 轻量 tag 两种写法给同一个 SHA，取到即对。
+          resolved="$(git ls-remote --exit-code "${CODEUP_REPO}" "refs/tags/${TARGET_REF}^{}" 2>/dev/null | cut -f1 || true)"
+          if [ -z "${resolved}" ]; then
+            resolved="$(git ls-remote --exit-code "${CODEUP_REPO}" "refs/tags/${TARGET_REF}" 2>/dev/null | cut -f1 || true)"
+          fi
+          [ -n "${resolved}" ] && resolved_type="tag"
+        fi
+
+        if [ -z "${resolved}" ]; then
+          echo "::error::在 Codeup 找不到分支或 tag '${TARGET_REF}'（只按分支名 / tag 名解析，不接受任意 commit）"
+          exit 1
+        fi
+
+        # ❗ 严格校验是 40 位十六进制：ls-remote 有时会把 "ref: ..." 行混进来，
+        #   截断成 sha-<8> 之前必须确认拿到的真是 commit。
+        if ! printf '%s' "${resolved}" | grep -qE '^[0-9a-f]{40}$'; then
+          echo "::error::解析出的不是合法的 40 位 commit SHA：'${resolved}'"
+          exit 1
+        fi
+
+        {
+          echo "commit=${resolved}"
+          # ❗ 8 位是**外部契约**：apply-release.sh 按 `sha-<8>` 找镜像（见该脚本 §553/§610
+          #   的注释 —— 「回滚 up 的 IMAGE_TAG 必须取快照清单里镜像的 tag（sha-<8位>）」）。
+          #   云效版用内置变量 ${CI_COMMIT_ID}（8 位）；这里显式截断，把这条契约钉在明处。
+          echo "short_sha=${resolved:0:8}"
+          # ❗ 12 位与 scripts/ci/plan-release.sh 的 SHORT_SHA_LEN 对齐（plan.json 的 shortSha）。
+          echo "sha12=${resolved:0:12}"
+          echo "ref_type=${resolved_type}"
+          echo "branch_or_tag=${TARGET_REF}"
+          echo "default_branch=${default_branch}"
+        } >> "${GITHUB_OUTPUT}"
+
+        echo "[checkout-source] ref=${TARGET_REF} type=${resolved_type} commit=${resolved} short=${resolved:0:8} default=${default_branch}"
+
+    # —— ② 检出：钉在第 ① 步解析出的 commit 上，杜绝「解析到构建之间分支又动了」 ——
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ steps.resolve.outputs.commit }}
+        path: ${{ inputs.path }}
+        fetch-depth: ${{ inputs.fetch-full-history == 'true' && 0 || 1 }}
+        fetch-tags: ${{ inputs.fetch-full-history }}
+        ssh-key: ${{ inputs.ssh-key }}
+        ssh-known-hosts: ${{ inputs.ssh-known-hosts }}
+        # 取码凭据只用于读：不持久化到 git config，后续步骤拿不到它。
+        persist-credentials: false
+
+    - name: sanity check
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        EXPECTED_COMMIT: ${{ steps.resolve.outputs.commit }}
+        DEFAULT_BRANCH: ${{ steps.resolve.outputs.default_branch }}
+      run: |
+        set -euo pipefail
+        actual="$(git rev-parse HEAD)"
+        if [ "${actual}" != "${EXPECTED_COMMIT}" ]; then
+          echo "::error::检出到的 HEAD (${actual}) 与解析出的 commit (${EXPECTED_COMMIT}) 不一致 —— 取码不可信，拒绝继续"
+          exit 1
+        fi
+        # 契约门禁依赖 origin/<default>：actions/checkout 会建 remote refs，
+        # 但显式断言一次，免得「基线悄悄没了 → 分流退化」这种安静失效。
+        if ! git rev-parse --verify --quiet "origin/${DEFAULT_BRANCH}" >/dev/null; then
+          echo "::warning::origin/${DEFAULT_BRANCH} 不存在 —— 依赖 merge-base 的分流会退化为全量（安全侧）"
+        fi
+        echo "[checkout-source] OK：工作树 $(pwd) @ ${actual}"

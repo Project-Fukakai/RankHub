@@ -1,0 +1,199 @@
+# rankhub-pr-gate —— RankHub 合并请求门禁流水线（GitHub Actions）
+#
+# 等价物是云效侧的 `rankhub-pr-gate`（pipelineId 5279119，权威内容存在云效，仓库里的
+# .yunxiao/rankhub-pr-gate.yml 只是它的副本）。本文件是**迁移后的权威定义**。
+#
+# 存在的意义：把「改了接口要重跑 nestia」「迁移只能新增」「Auth 不经 BFF」这些
+# **口头纪律**变成**合并卡点**。它**不产出镜像**，所以很便宜。
+#
+# 触发：Codeup 仓库的**合并请求事件** Webhook → `repository_dispatch`（event_type: codeup-mr，
+#       payload 只需 `{"ref": "<源分支名>"}`）。也支持手动 workflow_dispatch 跑任意分支。
+#
+# ══════════════════════════════════════════════════════════════════════════════
+# 与云效版的结构差异
+# ══════════════════════════════════════════════════════════════════════════════
+# * 云效版由平台的「合并请求新建/更新」触发**且由平台检出源分支**；GHA 看不到 Codeup 的事件，
+#   所以：① 触发靠 webhook；② 检出靠 resolve 步骤用 `git ls-remote` 把源分支名解析成 commit，
+#   再钉住那个 commit 检出（避免「解析完、门禁跑之前又推了一版」）。
+# * 云效版 `cloneDepth: 0`（完整克隆）是硬要求：护栏靠 `git merge-base origin/main HEAD` 拿基线 diff，
+#   浅克隆会让「只禁新增」类检查全部退化。这里 `fetch-full-history: 'true'` + `fetch-baseline`
+#   共同保证同一个语义。
+# * 三个 job 与云效版一一对应（lint/test、契约、静态护栏），仍然互不依赖、并行跑。
+# * 云效公共构建集群**不能起容器**（缺 CAP_SYS_ADMIN），所以「迁移在 scratch 库实跑」这类检查
+#   留在本地（docs/LOCAL_DEV.zh-CN.md）。GHA runner 有完整 docker，但**本流水线刻意不做** ——
+#   门禁要便宜、要快；扩容检查项是另一件事，不要夹带。
+
+name: rankhub-pr-gate
+
+on:
+  repository_dispatch:
+    # Codeup 仓库 Webhook 的 event_type。payload 只需要 `{"ref": "<源分支名>"}`。
+    types: [codeup-mr]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: '要检查的 Codeup 源分支名'
+        required: true
+        default: 'main'
+
+permissions:
+  contents: read
+
+# 同一个源分支只保留最新一次门禁：MR 连续推送时旧的那次已经无意义。
+# 与 release 不同，这里 cancel 是安全的 —— 门禁不产出任何制品。
+concurrency:
+  group: rankhub-pr-gate-${{ github.event.client_payload.ref || inputs.ref || 'unknown' }}
+  cancel-in-progress: true
+
+env:
+  CODEUP_REPO: git@codeup.aliyun.com:stcn/RankHub/RankHub-NET.git
+  NODE_VERSION: '22.12.0'
+  PNPM_VERSION: '10.12.3'
+  BASELINE_REF: origin/main
+  # phase2 逐 controller 是 nestia 的瓶颈（默认 1）；构建机 8C16G 上 4 并行把 251s 压到 96s。
+  NESTIA_BUILD_PARALLELISM: '4'
+  # 契约 job 的内存尖峰见 scripts/ci/pr-gate-contract.sh 头注释（run#22 的 OOM 边界）。
+  NODE_OPTIONS: '--max-old-space-size=8192'
+
+jobs:
+
+  # ──────────────────────────────────────────────────── ⓪ 解析源分支 → 不可变 commit
+  resolve:
+    name: 解析源分支
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    outputs:
+      commit: ${{ steps.src.outputs.commit }}
+      branch: ${{ steps.src.outputs.branch-or-tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: src
+        uses: ./.github/actions/checkout-source
+        with:
+          repository: ${{ env.CODEUP_REPO }}
+          path: codeup
+          ref: ${{ github.event.client_payload.ref || inputs.ref || '' }}
+          # 合并请求的源**一定是分支**（Codeup 的 MR 事件不给 tag）。
+          ref-type: branch
+          # 契约门禁与静态护栏都要 merge-base，必须完整历史（对齐云效版 cloneDepth: 0）。
+          fetch-full-history: 'true'
+          ssh-key: ${{ secrets.CODEUP_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.CODEUP_KNOWN_HOSTS }}
+
+      - name: 准备基线
+        uses: ./.github/actions/fetch-baseline
+        with:
+          path: codeup
+          baseline-ref: ${{ env.BASELINE_REF }}
+
+  # ──────────────────────────────────────────────────── ① 编译与单测
+  lint_test_job:
+    name: lint / test:unit
+    needs: resolve
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          repository: ${{ env.CODEUP_REPO }}
+          path: codeup
+          ref: ${{ needs.resolve.outputs.commit }}
+          fetch-full-history: 'true'
+          ssh-key: ${{ secrets.CODEUP_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.CODEUP_KNOWN_HOSTS }}
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+      - name: lint + test:unit
+        working-directory: codeup
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          # 仓库没有 typecheck 脚本：类型检查并进了各包 lint（tsc --noEmit）。
+          pnpm lint
+          pnpm test:unit
+
+  # ──────────────────────────────────────────────────── ② 契约同步（分层）
+  #
+  # 分层判定在 scripts/ci/pr-gate-contract.sh（↔ 云效版 job 的契约步骤，逐字同参）：
+  #   ① 路径分流：本 MR 没碰该侧的契约输入 ⇒ 跳过；
+  #   ② 指纹快路径：碰了但本地跑过生成（指纹一致）⇒ 跳过；
+  #   ③ 全量回落：其余情况重跑生成 + 零 diff 校验。
+  # 发布流水线里另有一个 `PR_GATE_CONTRACT_SCOPE=all PR_GATE_SDK=full` 的契约**全量** job，
+  # 保证过期 SDK 不会被打进前端镜像 —— 两边分工别搞混。
+  contract_job:
+    name: 契约同步（nestia）
+    needs: resolve
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          repository: ${{ env.CODEUP_REPO }}
+          path: codeup
+          ref: ${{ needs.resolve.outputs.commit }}
+          fetch-full-history: 'true'
+          ssh-key: ${{ secrets.CODEUP_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.CODEUP_KNOWN_HOSTS }}
+      - uses: ./.github/actions/fetch-baseline
+        with:
+          path: codeup
+          baseline-ref: ${{ env.BASELINE_REF }}
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+      - name: identity swagger / backend SDK 零 diff（分层）
+        working-directory: codeup
+        env:
+          # 默认 1 = 分层（路径分流 → 指纹快路径 → 全量回落）。
+          PR_GATE_SDK: '1'
+          PR_GATE_BASE_REF: ${{ env.BASELINE_REF }}
+        run: |
+          set -euo pipefail
+          # 刻意**不**在这里 pnpm install：pr-gate-contract.sh 自己按需装 ——
+          # 指纹快路径 / 双侧都跳过时，本次 job 连 install（约 25s）都不用付。
+          bash scripts/ci/pr-gate-contract.sh
+
+  # ──────────────────────────────────────────────────── ③ 静态护栏
+  #
+  # 拓扑 / 迁移 / 密钥 / 文档四类「静态可判定」的不变量。不装 Node、不装依赖。
+  # ❗ 基线靠 BASE_REF（脚本默认 origin/main，这里显式传，与另两个 job 同一口径）。
+  static_guard_job:
+    name: 静态护栏（拓扑 / 迁移 / 密钥 / 文档）
+    needs: resolve
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-source
+        with:
+          repository: ${{ env.CODEUP_REPO }}
+          path: codeup
+          ref: ${{ needs.resolve.outputs.commit }}
+          fetch-full-history: 'true'
+          ssh-key: ${{ secrets.CODEUP_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.CODEUP_KNOWN_HOSTS }}
+      - uses: ./.github/actions/fetch-baseline
+        with:
+          path: codeup
+          baseline-ref: ${{ env.BASELINE_REF }}
+      - name: 跑静态护栏
+        working-directory: codeup
+        env:
+          BASE_REF: ${{ env.BASELINE_REF }}
+        run: |
+          set -euo pipefail
+          # 只用 bash + grep/sed + git + python3（GHA runner 三者都有）。
+          bash scripts/ci/pr-gate-guards.sh
