@@ -192,10 +192,14 @@ runs:
         resolved=""
         resolved_type=""
 
-        # ❗ 允许直接传 **40 位 commit SHA**：下游 job 就是用
-        #   `ref: ${{ needs.resolve.outputs.commit }}` 把上游解析好的不可变 commit 传下来的 ——
-        #   那是最严格的一种用法（连 ref→SHA 的窗口都没有）。若坚持只认分支/tag 名，
-        #   那些 job 会因为「找不到名为 <sha> 的分支」而失败（首跑实测就是这个）。
+        # ❗ 允许直接传 **40 位 commit SHA**：下游 job 就是把上游 resolve 出来的 commit
+        #   不经解析直接传下来的 —— 那是最严格的一种用法（连 ref→SHA 的窗口都没有）。
+        #   若坚持只认分支/tag 名，那些 job 会因为「找不到名为 <sha> 的分支」而失败（首跑实测）。
+        #
+        # ⚠️ 写注释也要当心：本文件里**不能出现** GitHub 表达式字面量（`$` + `{{`），
+        #    连注释里的示例也不行 —— 平台会先做模板求值再跑步骤，注释里的 `needs.*`
+        #    会直接让 action 加载失败（`Unrecognized named-value: 'needs'`，run 35315761247 实测）。
+        #    所以这里用文字描述，不写那边的表达式原文。
         if printf '%s' "${TARGET_REF}" | grep -qE '^[0-9a-f]{40}$'; then
           resolved="${TARGET_REF}"
           resolved_type="commit"
