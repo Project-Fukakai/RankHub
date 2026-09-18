@@ -67,6 +67,12 @@ outputs:
   default-branch:
     description: 仓库默认分支名
     value: ${{ steps.resolve.outputs.default_branch }}
+  ssh-dir:
+    description: >-
+      本次跑用到的 SSH 材料目录（私钥 + 专用 known_hosts）。下游步骤若要自己跑 git
+      （例如 fetch-baseline 补基线），用这里的文件配上 GIT_SSH_COMMAND，才与取码同一口径 ——
+      否则会退回「试 ssh-agent 里所有身份」，把「deploy key 配错了」掩盖掉。
+    value: ${{ steps.resolve.outputs.ssh_dir }}
 
 runs:
   using: composite
@@ -74,20 +80,99 @@ runs:
     # —— ① 先解析 ref：拿到不可变的 commit SHA，后面的 checkout 钉死它 ——
     # 刻意**不解析 webhook payload 的 JSON 结构**：Codeup 的 webhook body 形状没有稳定契约，
     # 换成「只要 body 里带 ref 一词就能用」的自解析路径，触发器侧改字段不会弄坏流水线。
+    #
+    # ❗ 这一步也是**取码凭据的唯一体检点**（`ls-remote` 是第一次真实 SSH 连接）。所以：
+    #   * 把私钥写到磁盘文件（`GIT_SSH_COMMAND` 需要的是文件路径；写进文件才不经过进程 argv，
+    #     `/proc/*/cmdline` 看不到它）；
+    #   * **不吞 stderr** —— 首跑就踩过：`2>/dev/null` 把「到底哪一步坏了」全丢了，
+    #     只剩一句「凭据或 known_hosts 有问题？」。诊断信息比"好看"重要得多。
     - id: resolve
       shell: bash
       env:
         CODEUP_REPO: ${{ inputs.repository }}
         TARGET_REF: ${{ inputs.ref }}
         TARGET_REF_TYPE: ${{ inputs.ref-type }}
+        SSH_KEY: ${{ inputs.ssh-key }}
+        SSH_KNOWN_HOSTS: ${{ inputs.ssh-known-hosts }}
       run: |
         set -euo pipefail
 
-        # 默认分支：既用于「没给 ref」的回退，也用于 pr-gate 的基线。
-        default_branch="$(git ls-remote --symref "${CODEUP_REPO}" HEAD 2>/dev/null \
+        # —— 先做「配没配」的空值检查：这两种错误与 SSH 无关，不该混进连接报错里 ——
+        if [ -z "${CODEUP_REPO}" ]; then
+          echo "::error::未提供 Codeup 仓库地址（input: repository）"
+          exit 1
+        fi
+        if [ -z "${SSH_KEY}" ]; then
+          echo "::error::Secret CODEUP_SSH_KEY 是空的 —— 去 Settings → Secrets and variables → Actions 填只读 deploy key 的**私钥**（含 BEGIN/END 两行）"
+          exit 1
+        fi
+        if [ -z "${SSH_KNOWN_HOSTS}" ]; then
+          echo "::error::Secret CODEUP_KNOWN_HOSTS 是空的 —— 填 codeup.aliyun.com 的主机公钥行（见 .github/webhook-setup.md §1.3）"
+          exit 1
+        fi
+
+        # —— 私钥落盘（0600），并按已知主机公钥钉死服务端身份 ——
+        ssh_dir="${RUNNER_TEMP:-/tmp}/rankhub-ssh"
+        mkdir -p "${ssh_dir}"
+        chmod 700 "${ssh_dir}"
+        printf '%s\n' "${SSH_KEY}" > "${ssh_dir}/codeup_key"
+        chmod 600 "${ssh_dir}/codeup_key"
+        printf '%s\n' "${SSH_KNOWN_HOSTS}" > "${ssh_dir}/known_hosts"
+        chmod 600 "${ssh_dir}/known_hosts"
+        # ❗ IdentitiesOnly=yes —— 只试这一把 key，不碰 ssh-agent 里的其它身份。
+        #   没有它时，agent 里恰好有一把**有权访问该仓库**的 key 会让「deploy key 配错了」
+        #   这件事被掩盖（本地复现不出来、CI 上随机失败）。
+        # ❗ BatchMode=yes —— 任何交互式提问（口令、首次确认主机）都直接失败而不是挂住。
+        export GIT_SSH_COMMAND="ssh -i ${ssh_dir}/codeup_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${ssh_dir}/known_hosts"
+
+        echo "[checkout-source] 探测 ${CODEUP_REPO}（key: $(ssh-keygen -lf "${ssh_dir}/codeup_key" 2>/dev/null || echo '<无法读取>')）"
+
+        set +e
+        probe="$(git ls-remote --symref "${CODEUP_REPO}" HEAD 2>&1)"
+        probe_rc=$?
+        set -e
+
+        if [ "${probe_rc}" -ne 0 ]; then
+          # 带 -v 再跑一次，把 SSH 的协商过程与已知主机校验结果打出来 —— 这些是
+          # 「哪一步坏了」的唯一线索，且**不含密钥本身**（ssh -v 只打印算法与文件名）。
+          set +e
+          verbose="$(ssh -v -i "${ssh_dir}/codeup_key" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${ssh_dir}/known_hosts" \
+            -T git@codeup.aliyun.com 2>&1 | tail -n 40)"
+          set -e
+
+          echo "::group::SSH 诊断（git ls-remote 退出码 ${probe_rc}）"
+          printf '%s\n' "${probe}"
+          echo "---- ssh -v ----"
+          printf '%s\n' "${verbose}"
+          echo "::endgroup::"
+
+          echo "::error::从 ${CODEUP_REPO} 取码失败（退出码 ${probe_rc}）"
+          case "${probe_rc}" in
+            128)
+              echo "::error::退出码 128 = 仓库不可读或**认证被拒**。逐条查："
+              echo "  1) Codeup → RankHub-NET → 设置 →「部署公钥」里加的是 CODEUP_SSH_KEY 对应的**公钥**吗？（公钥来自 ssh-keygen 的 .pub 文件，不是私钥）"
+              echo "  2) 那把公钥勾的是**只读**吗？（只读就够，本流水线从不写 Codeup）"
+              echo "  3) 关键路径写成 git@codeup.aliyun.com:stcn/RankHub/RankHub-NET.git 了吗？上面的诊断里应有 'Welcome to Codeup' 或 'successfully authenticated'"
+              ;;
+            255)
+              echo "::error::退出码 255 = **SSH 层就没连上**（还没到仓库权限那一步）。逐条查："
+              echo "  1) CODEUP_KNOWN_HOSTS 是否是 codeup.aliyun.com 的 **ssh-rsa** 主机公钥行？①格式须为 '<host> ssh-rsa AAAA...'；"
+              echo "     ②必须用 ssh-keygen -lf 核对过指纹 SHA256:yEGmgQNVrc3QAvDvoBrTCF2s07KwmmQ+AbWi9vSt/fE（Codeup 官方文档）"
+              echo "  2) 有没有把**用户名/部署公钥**（ssh-ed25519 AAAA...）误填进来？那两样都不是主机公钥。"
+              echo "  3) 上面的 ssh -v 里搜 'Host key verification failed'（known_hosts 不对）或 'Connection timed out'（网络/出站被拦）"
+              ;;
+            *)
+              echo "::error::退出码 ${probe_rc} —— 见上方诊断输出"
+              ;;
+          esac
+          exit 1
+        fi
+
+        default_branch="$(printf '%s\n' "${probe}" \
           | sed -n 's|^ref: refs/heads/\([^[:space:]]*\).*|\1|p' | head -n 1 || true)"
         if [ -z "${default_branch}" ]; then
-          echo "::error::无法从 ${CODEUP_REPO} 解析默认分支 —— 取码凭据或 known_hosts 有问题？"
+          echo "::error::连通了但解析不出默认分支 —— ls-remote --symref 的输出形状变了？原文见上方诊断"
           exit 1
         fi
 
@@ -137,6 +222,7 @@ runs:
           echo "ref_type=${resolved_type}"
           echo "branch_or_tag=${TARGET_REF}"
           echo "default_branch=${default_branch}"
+          echo "ssh_dir=${ssh_dir}"
         } >> "${GITHUB_OUTPUT}"
 
         echo "[checkout-source] ref=${TARGET_REF} type=${resolved_type} commit=${resolved} short=${resolved:0:8} default=${default_branch}"

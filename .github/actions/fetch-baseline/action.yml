@@ -15,10 +15,10 @@ inputs:
     description: 基线 ref（例如 origin/main）
     required: false
     default: origin/main
-  token:
+  ssh-dir:
     description: >-
-      兜底用的只读 token（HTTPS 私有仓库取码）。留空则只用 actions/checkout 已经配好的
-      deploy key。正常情况用不到 —— 它只是为了「SSH 那条路不通时还有一条路」。
+      取码材料目录（checkout-source 的 ssh-dir 输出）。给了就用同一把 deploy key 与
+      同一份 known_hosts；留空会退回 git 的默认身份解析（仅用于本地/调试）。
     required: false
     default: ''
 
@@ -29,7 +29,7 @@ runs:
       working-directory: ${{ inputs.path }}
       env:
         BASELINE_REF: ${{ inputs.baseline-ref }}
-        FETCH_TOKEN: ${{ inputs.token }}
+        SSH_DIR: ${{ inputs.ssh-dir }}
       run: |
         set -euo pipefail
 
@@ -38,25 +38,27 @@ runs:
           exit 0
         fi
 
+        # ❗ 必须与 checkout-source **同一把 key、同一份 known_hosts**。
+        #    不带这个的话 git 会去翻 ssh-agent 里的所有身份 —— 在 runner 上通常什么都翻不到，
+        #    但一旦翻到一把有权的 key，「deploy key 配错了」这件事就被掩盖了（CI 上随机成功/失败）。
+        #    ssh-dir 由 checkout-source 输出（见其 outputs.ssh-dir 的说明）。
+        if [ -n "${SSH_DIR}" ] && [ -f "${SSH_DIR}/codeup_key" ]; then
+          export GIT_SSH_COMMAND="ssh -i ${SSH_DIR}/codeup_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${SSH_DIR}/known_hosts"
+        else
+          echo "::warning::没拿到 ssh-dir（取码材料）—— 这次 fetch 会走 git 的默认 SSH 身份解析，可能试到别的 key"
+        fi
+
         branch="${BASELINE_REF#origin/}"
         refspec="+refs/heads/${branch}:refs/remotes/origin/${branch}"
 
-        # ① 先走 checkout 已经配好的 origin（SSH deploy key，持久化在 git config 里）。
-        #    大多数情况下这一条就够了。
-        if git fetch --no-tags --depth=200 origin "${refspec}" 2>&1; then
+        # 直接用 origin 的 URL 显式 fetch：不走 `git fetch origin` 的 remote 配置，
+        # 免得又引入一层「remote 上配了什么」的不确定性。
+        remote_url="$(git remote get-url origin)"
+        if git fetch --no-tags --depth=200 "${remote_url}" "${refspec}" 2>&1; then
           :
         else
-          echo "[fetch-baseline] origin 取码失败，改用显式 HTTPS 兜底"
-          # ② 兜底：SSH URL → HTTPS（覆盖 `git@host:org/repo.git` 与 `ssh://git@host/org/repo.git`
-          #    两种写法；GITHUB_TOKEN 之类的只读 token 走 x-access-token）。
-          remote_url="$(git remote get-url origin)"
-          https_url="$(printf '%s' "${remote_url}" \
-            | sed -e 's|^ssh://git@|https://|' -e 's|^git@\([^:]*\):|https://\1/|')"
-          auth_url="${https_url}"
-          if [ -n "${FETCH_TOKEN}" ]; then
-            auth_url="$(printf '%s' "${https_url}" | sed "s|^https://|https://x-access-token:${FETCH_TOKEN}@|")"
-          fi
-          git fetch --no-tags --depth=200 "${auth_url}" "${refspec}" 2>&1 || true
+          echo "::warning::用显式 URL 取基线失败，再试一次 origin 的默认配置"
+          git fetch --no-tags --depth=200 origin "${refspec}" 2>&1 || true
         fi
 
         if git rev-parse --verify --quiet "${BASELINE_REF}" >/dev/null; then

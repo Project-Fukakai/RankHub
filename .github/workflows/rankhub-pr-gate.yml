@@ -65,6 +65,9 @@ jobs:
     outputs:
       commit: ${{ steps.src.outputs.commit }}
       branch: ${{ steps.src.outputs.branch-or-tag }}
+      # 下游 job 的 fetch-baseline 要用**同一把 key、同一份 known_hosts**，
+      # 否则会退回 git 的默认身份解析（掩盖「deploy key 配错了」）。
+      ssh-dir: ${{ steps.src.outputs.ssh-dir }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,6 +90,7 @@ jobs:
         with:
           path: codeup
           baseline-ref: ${{ env.BASELINE_REF }}
+          ssh-dir: ${{ needs.resolve.outputs.ssh-dir }}
 
   # ──────────────────────────────────────────────────── ① 编译与单测
   lint_test_job:
@@ -148,6 +152,7 @@ jobs:
         with:
           path: codeup
           baseline-ref: ${{ env.BASELINE_REF }}
+          ssh-dir: ${{ needs.resolve.outputs.ssh-dir }}
       - uses: ./.github/actions/setup-node-pnpm
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -189,6 +194,7 @@ jobs:
         with:
           path: codeup
           baseline-ref: ${{ env.BASELINE_REF }}
+          ssh-dir: ${{ needs.resolve.outputs.ssh-dir }}
       - name: 跑静态护栏
         working-directory: codeup
         env:
